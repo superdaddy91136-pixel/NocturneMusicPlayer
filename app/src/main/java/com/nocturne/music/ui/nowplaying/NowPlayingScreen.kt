@@ -4,6 +4,9 @@ import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.Crossfade
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.CubicBezierEasing
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -11,6 +14,7 @@ import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.animateScrollBy
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
@@ -69,14 +73,21 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithCache
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.TransformOrigin
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
@@ -96,6 +107,7 @@ import com.nocturne.music.model.UserSettings
 import com.nocturne.music.ui.components.ArtworkImage
 import com.nocturne.music.ui.components.NowPlayingEqualizerBars
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import kotlin.math.abs
 import kotlin.math.roundToLong
@@ -154,7 +166,7 @@ fun NowPlayingScreen(
         }
     }
 
-    val animatedColor by androidx.compose.animation.animateColorAsState(
+    val animatedColor by animateColorAsState(
         targetValue = songColor,
         animationSpec = tween(500),
         label = "npBgColor"
@@ -594,7 +606,7 @@ fun NowPlayingScreen(
                     Spacer(modifier = Modifier.height(24.dp))
                 }
 
-                // 3. Lyrics Card Preview (Fixed height ~260dp, peeking in at bottom)
+                // 3. Lyrics Card Preview (~260dp height, peeking in at bottom)
                 item(key = "lyrics_card_preview") {
                     LyricsCardPreview(
                         lyricsDocument = lyricsDocument,
@@ -735,8 +747,9 @@ private fun LyricsCardPreview(
     onFetchOnlineClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val activeLineIndex = remember(lyricsDocument, currentPositionMs) {
-        lyricsDocument.findActiveLineIndex(currentPositionMs).coerceAtLeast(0)
+    val leadPositionMs = currentPositionMs + 200L
+    val activeLineIndex = remember(lyricsDocument, leadPositionMs) {
+        lyricsDocument.findActiveLineIndex(leadPositionMs).coerceAtLeast(0)
     }
 
     Box(
@@ -748,8 +761,7 @@ private fun LyricsCardPreview(
             .padding(20.dp)
     ) {
         Column(
-            modifier = Modifier
-                .fillMaxSize()
+            modifier = Modifier.fillMaxSize()
         ) {
             Text(
                 text = "Lyrics",
@@ -784,17 +796,32 @@ private fun LyricsCardPreview(
                             val visibleLines = lyricsDocument.lines.drop(activeLineIndex).take(4)
                             visibleLines.forEachIndexed { idx, line ->
                                 val isCurrent = idx == 0
+                                val textColor by animateColorAsState(
+                                    targetValue = if (isCurrent) Color.White else Color.White.copy(alpha = 0.55f),
+                                    animationSpec = tween(250),
+                                    label = "previewTextColor"
+                                )
+                                val scale by animateFloatAsState(
+                                    targetValue = if (isCurrent) 1.04f else 1.0f,
+                                    animationSpec = tween(250),
+                                    label = "previewTextScale"
+                                )
                                 Text(
                                     text = line.text.ifBlank { " " },
                                     style = MaterialTheme.typography.bodyLarge.copy(
                                         fontWeight = if (isCurrent) FontWeight.Bold else FontWeight.Normal,
                                         fontSize = 16.sp
                                     ),
-                                    color = if (isCurrent) Color.White else Color.White.copy(alpha = 0.55f),
+                                    color = textColor,
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis,
                                     modifier = Modifier
                                         .fillMaxWidth()
+                                        .graphicsLayer {
+                                            scaleX = scale
+                                            scaleY = scale
+                                            transformOrigin = TransformOrigin(0f, 0.5f)
+                                        }
                                         .clickable { onSeekToLine(line.startTimeMs) }
                                 )
                             }
@@ -864,34 +891,64 @@ private fun InteractiveLyricsStage(
     modifier: Modifier = Modifier
 ) {
     val listState = rememberLazyListState()
-    val activeLineIndex = remember(lyricsDocument, currentPositionMs) {
-        lyricsDocument.findActiveLineIndex(currentPositionMs)
+    val leadPositionMs = currentPositionMs + 200L
+    val activeLineIndex = remember(lyricsDocument, leadPositionMs) {
+        lyricsDocument.findActiveLineIndex(leadPositionMs).coerceAtLeast(0)
     }
 
     var userManualScrollActive by remember { mutableStateOf(false) }
     var lastManualInteractionMs by remember { mutableLongStateOf(0L) }
 
-    LaunchedEffect(listState.isScrollInProgress) {
-        if (listState.isScrollInProgress) {
-            userManualScrollActive = true
-            lastManualInteractionMs = System.currentTimeMillis()
-        } else if (userManualScrollActive) {
-            delay(3200L)
-            if (System.currentTimeMillis() - lastManualInteractionMs >= 3000L) {
-                userManualScrollActive = false
+    val nestedScrollConnection = remember {
+        object : NestedScrollConnection {
+            override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
+                if (source == NestedScrollSource.UserInput) {
+                    userManualScrollActive = true
+                    lastManualInteractionMs = System.currentTimeMillis()
+                }
+                return Offset.Zero
             }
         }
     }
 
-    LaunchedEffect(activeLineIndex, userManualScrollActive, lyricsDocument.songId) {
-        if (!userManualScrollActive && lyricsDocument.isSynced && activeLineIndex >= 0) {
-            runCatching {
-                listState.animateScrollToItem(
-                    index = activeLineIndex,
-                    scrollOffset = -140
-                )
-            }
+    // Resume auto-follow 3 seconds after touch/fling ends
+    LaunchedEffect(userManualScrollActive, lastManualInteractionMs) {
+        if (userManualScrollActive) {
+            delay(3000L)
+            userManualScrollActive = false
         }
+    }
+
+    // Smooth follow scroll logic
+    LaunchedEffect(lyricsDocument.songId) {
+        snapshotFlow { activeLineIndex }
+            .collectLatest { targetIndex ->
+                if (!userManualScrollActive && lyricsDocument.isSynced && targetIndex >= 0) {
+                    val layoutInfo = listState.layoutInfo
+                    val visibleItems = layoutInfo.visibleItemsInfo
+                    val targetItem = visibleItems.find { it.index == targetIndex }
+                    val viewportCenter = layoutInfo.viewportStartOffset + (layoutInfo.viewportEndOffset - layoutInfo.viewportStartOffset) / 2
+
+                    val distance = if (targetItem != null) {
+                        val itemCenter = targetItem.offset + targetItem.size / 2
+                        itemCenter - viewportCenter
+                    } else {
+                        null
+                    }
+
+                    if (distance == null || abs(targetIndex - listState.firstVisibleItemIndex) > 6) {
+                        listState.scrollToItem(targetIndex, scrollOffset = -viewportCenter + 100)
+                    } else if (distance != 0) {
+                        listState.animateScrollBy(
+                            value = distance.toFloat(),
+                            animationSpec = tween(
+                                durationMillis = 500,
+                                easing = CubicBezierEasing(0.22f, 1f, 0.36f, 1f)
+                            )
+                        )
+                    }
+                }
+            }
     }
 
     Box(
@@ -922,26 +979,43 @@ private fun InteractiveLyricsStage(
             lyricsDocument.isSynced && lyricsDocument.lines.isNotEmpty() -> {
                 LazyColumn(
                     state = listState,
-                    contentPadding = PaddingValues(vertical = 60.dp),
+                    contentPadding = PaddingValues(vertical = 140.dp),
                     verticalArrangement = Arrangement.spacedBy(16.dp),
                     modifier = Modifier
                         .fillMaxSize()
+                        .nestedScroll(nestedScrollConnection)
                 ) {
                     itemsIndexed(
                         items = lyricsDocument.lines,
                         key = { _, line -> line.startTimeMs }
                     ) { index, line ->
                         val isActive = index == activeLineIndex
+                        val textColor by animateColorAsState(
+                            targetValue = if (isActive) Color.White else Color.White.copy(alpha = 0.45f),
+                            animationSpec = tween(250),
+                            label = "interactiveTextColor"
+                        )
+                        val scale by animateFloatAsState(
+                            targetValue = if (isActive) 1.04f else 1.0f,
+                            animationSpec = tween(250),
+                            label = "interactiveTextScale"
+                        )
+
                         Text(
                             text = line.text.ifBlank { " " },
                             style = MaterialTheme.typography.headlineSmall.copy(
                                 fontWeight = if (isActive) FontWeight.Bold else FontWeight.Normal,
                                 fontSize = 23.sp
                             ),
-                            color = if (isActive) Color.White else Color.White.copy(alpha = 0.45f),
+                            color = textColor,
                             textAlign = TextAlign.Start,
                             modifier = Modifier
                                 .fillMaxWidth()
+                                .graphicsLayer {
+                                    scaleX = scale
+                                    scaleY = scale
+                                    transformOrigin = TransformOrigin(0f, 0.5f)
+                                }
                                 .clickable { onSeekToLine(line.startTimeMs) }
                                 .padding(horizontal = 4.dp, vertical = 2.dp)
                         )
@@ -951,7 +1025,9 @@ private fun InteractiveLyricsStage(
             !lyricsDocument.isSynced && lyricsDocument.rawText.isNotBlank() -> {
                 LazyColumn(
                     contentPadding = PaddingValues(vertical = 20.dp),
-                    modifier = Modifier.fillMaxSize()
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .nestedScroll(nestedScrollConnection)
                 ) {
                     item {
                         Text(
