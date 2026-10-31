@@ -91,6 +91,7 @@ import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -898,6 +899,11 @@ private fun InteractiveLyricsStage(
 
     var userManualScrollActive by remember { mutableStateOf(false) }
     var lastManualInteractionMs by remember { mutableLongStateOf(0L) }
+    var containerHeight by remember { mutableStateOf(0) }
+    val density = LocalDensity.current
+    val verticalPadding = remember(containerHeight) {
+        if (containerHeight > 0) with(density) { (containerHeight / 2).toDp() } else 140.dp
+    }
 
     val nestedScrollConnection = remember {
         object : NestedScrollConnection {
@@ -919,33 +925,40 @@ private fun InteractiveLyricsStage(
         }
     }
 
-    // Smooth follow scroll logic
+    // When lyrics view opens or song changes, center active line right away
+    LaunchedEffect(song.id, lyricsDocument.songId) {
+        if (lyricsDocument.isSynced && activeLineIndex >= 0) {
+            listState.scrollToItem(activeLineIndex)
+        }
+    }
+
+    // Smooth center-aligned follow scroll logic
     LaunchedEffect(lyricsDocument.songId) {
+        var isInitial = true
         snapshotFlow { activeLineIndex }
             .collectLatest { targetIndex ->
-                if (!userManualScrollActive && lyricsDocument.isSynced && targetIndex >= 0) {
+                if (lyricsDocument.isSynced && targetIndex >= 0) {
                     val layoutInfo = listState.layoutInfo
+                    val viewportHeight = layoutInfo.viewportEndOffset - layoutInfo.viewportStartOffset
+                    val viewportCenter = layoutInfo.viewportStartOffset + viewportHeight / 2
                     val visibleItems = layoutInfo.visibleItemsInfo
                     val targetItem = visibleItems.find { it.index == targetIndex }
-                    val viewportCenter = layoutInfo.viewportStartOffset + (layoutInfo.viewportEndOffset - layoutInfo.viewportStartOffset) / 2
 
-                    val distance = if (targetItem != null) {
+                    if (isInitial || targetItem == null || abs(targetIndex - listState.firstVisibleItemIndex) > 6) {
+                        isInitial = false
+                        listState.scrollToItem(targetIndex)
+                    } else if (!userManualScrollActive) {
                         val itemCenter = targetItem.offset + targetItem.size / 2
-                        itemCenter - viewportCenter
-                    } else {
-                        null
-                    }
-
-                    if (distance == null || abs(targetIndex - listState.firstVisibleItemIndex) > 6) {
-                        listState.scrollToItem(targetIndex, scrollOffset = -viewportCenter + 100)
-                    } else if (distance != 0) {
-                        listState.animateScrollBy(
-                            value = distance.toFloat(),
-                            animationSpec = tween(
-                                durationMillis = 500,
-                                easing = CubicBezierEasing(0.22f, 1f, 0.36f, 1f)
+                        val distance = itemCenter - viewportCenter
+                        if (distance != 0) {
+                            listState.animateScrollBy(
+                                value = distance.toFloat(),
+                                animationSpec = tween(
+                                    durationMillis = 500,
+                                    easing = CubicBezierEasing(0.22f, 1f, 0.36f, 1f)
+                                )
                             )
-                        )
+                        }
                     }
                 }
             }
@@ -955,6 +968,7 @@ private fun InteractiveLyricsStage(
         modifier = modifier
             .fillMaxWidth()
             .aspectRatio(1f)
+            .onSizeChanged { containerHeight = it.height }
             .drawWithCache {
                 val brush = Brush.verticalGradient(
                     colors = listOf(Color.Transparent, Color.White, Color.White, Color.Transparent),
@@ -979,7 +993,7 @@ private fun InteractiveLyricsStage(
             lyricsDocument.isSynced && lyricsDocument.lines.isNotEmpty() -> {
                 LazyColumn(
                     state = listState,
-                    contentPadding = PaddingValues(vertical = 140.dp),
+                    contentPadding = PaddingValues(vertical = verticalPadding),
                     verticalArrangement = Arrangement.spacedBy(16.dp),
                     modifier = Modifier
                         .fillMaxSize()
