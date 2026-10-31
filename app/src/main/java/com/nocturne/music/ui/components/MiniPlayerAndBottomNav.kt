@@ -265,8 +265,11 @@ fun NocturneBottomNavigationBar(
 
                 Box(
                     modifier = Modifier
-                        .clip(CircleShape)
-                        .clickable { onNavigate(dest) }
+                        .clickable(
+                            interactionSource = androidx.compose.runtime.remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
+                            indication = null,
+                            onClick = { onNavigate(dest) }
+                        )
                         .padding(14.dp),
                     contentAlignment = Alignment.Center
                 ) {
@@ -277,9 +280,7 @@ fun NocturneBottomNavigationBar(
                                     painter = painterResource(id = if (isSelected) R.drawable.ic_home_filled_custom else R.drawable.ic_home_custom),
                                     contentDescription = dest.label,
                                     tint = if (isSelected) Color.White else Color.White.copy(alpha = 0.6f),
-                                    modifier = Modifier
-                                        .size(30.dp)
-                                        .graphicsLayer(shadowElevation = 8f)
+                                    modifier = Modifier.size(30.dp)
                                 )
                             }
                         }
@@ -289,9 +290,7 @@ fun NocturneBottomNavigationBar(
                                     painter = painterResource(id = if (isSelected) R.drawable.ic_library_filled_custom else R.drawable.ic_library_custom),
                                     contentDescription = dest.label,
                                     tint = if (isSelected) Color.White else Color.White.copy(alpha = 0.6f),
-                                    modifier = Modifier
-                                        .size(30.dp)
-                                        .graphicsLayer(shadowElevation = 8f)
+                                    modifier = Modifier.size(30.dp)
                                 )
                             }
                         }
@@ -305,9 +304,7 @@ fun NocturneBottomNavigationBar(
                                 imageVector = dest.icon,
                                 contentDescription = dest.label,
                                 tint = tintColor,
-                                modifier = Modifier
-                                    .size(30.dp)
-                                    .graphicsLayer(shadowElevation = 8f)
+                                modifier = Modifier.size(30.dp)
                             )
                         }
                     }
