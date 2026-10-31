@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Nocturne</string>
+    <string name="app_tagline">Obsidian Reference Audio Player</string>
+    <string name="notification_channel_name">Nocturne Playback</string>
+    <string name="notification_channel_description">Active audio playback controls and artwork</string>
+    <string name="nav_home">Home</string>
+    <string name="nav_library">Library</string>
+    <string name="nav_search">Search</string>
+    <string name="permission_audio_title">Grant Audio Library Access</string>
+    <string name="permission_audio_rationale">Nocturne scans your local device storage directly to build an instant, offline library with artwork and synchronized lyrics.</string>
+</resources>

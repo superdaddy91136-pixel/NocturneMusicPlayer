@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="amoled_black">#FF050507</color>
+    <color name="obsidian_surface">#FF0B0C10</color>
+    <color name="charcoal_elevated">#FF12141C</color>
+    <color name="liquid_accent">#FF7C9BFF</color>
+    <color name="warm_amber">#FFFFB86C</color>
+</resources>
