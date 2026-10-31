@@ -99,7 +99,7 @@ fun HomeScreen(
         modifier = modifier
             .fillMaxSize()
             .statusBarsPadding(),
-        contentPadding = PaddingValues(bottom = 160.dp)
+        contentPadding = PaddingValues(bottom = 152.dp)
     ) {
         // 1. Top Header Bar with Profile Menu (top-left) & Rescan (top-right)
         item {

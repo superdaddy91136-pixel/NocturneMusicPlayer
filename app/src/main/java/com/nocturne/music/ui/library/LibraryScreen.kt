@@ -369,7 +369,7 @@ fun LibraryScreen(
         when (selectedTab) {
             LibraryTab.SONGS -> {
                 LazyColumn(
-                    contentPadding = PaddingValues(bottom = 160.dp),
+                    contentPadding = PaddingValues(bottom = 152.dp),
                     modifier = Modifier.fillMaxSize()
                 ) {
                     item {
@@ -412,7 +412,7 @@ fun LibraryScreen(
             LibraryTab.ALBUMS -> {
                 LazyVerticalGrid(
                     columns = GridCells.Adaptive(minSize = 156.dp),
-                    contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 8.dp, bottom = 160.dp),
+                    contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 8.dp, bottom = 152.dp),
                     horizontalArrangement = Arrangement.spacedBy(14.dp),
                     verticalArrangement = Arrangement.spacedBy(14.dp),
                     modifier = Modifier.fillMaxSize()
@@ -429,7 +429,7 @@ fun LibraryScreen(
             LibraryTab.ARTISTS -> {
                 LazyVerticalGrid(
                     columns = GridCells.Adaptive(minSize = 116.dp),
-                    contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 160.dp),
+                    contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 152.dp),
                     horizontalArrangement = Arrangement.spacedBy(10.dp),
                     verticalArrangement = Arrangement.spacedBy(14.dp),
                     modifier = Modifier.fillMaxSize()
@@ -523,7 +523,7 @@ fun LibraryScreen(
 
             LibraryTab.FAVOURITES -> {
                 LazyColumn(
-                    contentPadding = PaddingValues(bottom = 160.dp),
+                    contentPadding = PaddingValues(bottom = 152.dp),
                     modifier = Modifier.fillMaxSize()
                 ) {
                     item {
@@ -610,7 +610,7 @@ fun LibraryScreen(
 
             LibraryTab.RECENT -> {
                 LazyColumn(
-                    contentPadding = PaddingValues(bottom = 160.dp),
+                    contentPadding = PaddingValues(bottom = 152.dp),
                     modifier = Modifier.fillMaxSize()
                 ) {
                     item {
@@ -837,7 +837,7 @@ private fun AlbumDetailView(
         modifier = Modifier
             .fillMaxSize()
             .statusBarsPadding(),
-        contentPadding = PaddingValues(bottom = 160.dp)
+        contentPadding = PaddingValues(bottom = 152.dp)
     ) {
         item {
             Row(
@@ -954,7 +954,7 @@ private fun ArtistDetailView(
         modifier = Modifier
             .fillMaxSize()
             .statusBarsPadding(),
-        contentPadding = PaddingValues(bottom = 160.dp)
+        contentPadding = PaddingValues(bottom = 152.dp)
     ) {
         item {
             Row(
@@ -1086,7 +1086,7 @@ private fun PlaylistDetailView(
         modifier = Modifier
             .fillMaxSize()
             .statusBarsPadding(),
-        contentPadding = PaddingValues(bottom = 160.dp)
+        contentPadding = PaddingValues(bottom = 152.dp)
     ) {
         item {
             Row(
@@ -1223,7 +1223,7 @@ private fun CollectionTrackListDetailView(
         modifier = Modifier
             .fillMaxSize()
             .statusBarsPadding(),
-        contentPadding = PaddingValues(bottom = 160.dp)
+        contentPadding = PaddingValues(bottom = 152.dp)
     ) {
         item {
             Row(

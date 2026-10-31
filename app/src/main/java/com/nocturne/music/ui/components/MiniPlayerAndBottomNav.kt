@@ -99,8 +99,7 @@ fun PersistentMiniPlayer(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 12.dp, vertical = 6.dp)
-                    .padding(bottom = 4.dp)
+                    .padding(horizontal = 12.dp)
                     .shadow(
                         elevation = 12.dp,
                         shape = shape,
@@ -253,7 +252,8 @@ fun NocturneBottomNavigationBar(
             .fillMaxWidth()
             .background(Color.Transparent)
             .navigationBarsPadding()
-            .padding(horizontal = 20.dp, vertical = 10.dp)
+            .padding(horizontal = 20.dp)
+            .padding(top = 6.dp, bottom = 10.dp)
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),

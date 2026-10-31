@@ -91,7 +91,7 @@ fun SettingsScreen(
         modifier = modifier
             .fillMaxSize()
             .statusBarsPadding(),
-        contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 8.dp, bottom = 160.dp),
+        contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 8.dp, bottom = 152.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         item {
