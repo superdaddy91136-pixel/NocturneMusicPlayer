@@ -3,6 +3,7 @@ package com.nocturne.music.ui.nowplaying
 import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -23,6 +24,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -62,19 +64,24 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -88,6 +95,8 @@ import com.nocturne.music.model.TimeFormatUtils
 import com.nocturne.music.model.UserSettings
 import com.nocturne.music.ui.components.ArtworkImage
 import com.nocturne.music.ui.components.NowPlayingEqualizerBars
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlin.math.abs
 import kotlin.math.roundToLong
 
@@ -125,7 +134,9 @@ fun NowPlayingScreen(
     val song = playbackState.currentSong ?: return
     val atmosphere = LocalArtworkAtmosphere.current
     val listState = rememberLazyListState()
+    val coroutineScope = androidx.compose.runtime.rememberCoroutineScope()
     var showQueueSheet by remember { mutableStateOf(false) }
+    var showLyricsInArtworkSpot by rememberSaveable { mutableStateOf(false) }
 
     // Return page scroll to top when switching songs
     LaunchedEffect(song.id) {
@@ -160,7 +171,7 @@ fun NowPlayingScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .background(
-                    brush = androidx.compose.ui.graphics.Brush.verticalGradient(
+                    brush = Brush.verticalGradient(
                         colors = listOf(
                             animatedColor,
                             NocturnePalette.AmoledBlack
@@ -205,14 +216,32 @@ fun NowPlayingScreen(
                     ) {
                         Spacer(modifier = Modifier.height(16.dp))
 
-                        // Artwork stage (static on play/pause, crossfade on song change)
-                        ArtworkShowcaseStage(
-                            song = song,
-                            smoothTransitions = userSettings.smoothArtworkTransitions,
-                            onSwipeNext = onSkipNext,
-                            onSwipePrevious = onSkipPrevious,
-                            onSwipeDownCollapse = onCollapse
-                        )
+                        // Artwork stage or Interactive Lyrics stage in the artwork spot
+                        Crossfade(
+                            targetState = showLyricsInArtworkSpot,
+                            animationSpec = tween(250),
+                            label = "artworkLyricsToggle"
+                        ) { showLyrics ->
+                            if (showLyrics) {
+                                InteractiveLyricsStage(
+                                    song = song,
+                                    lyricsDocument = lyricsDocument,
+                                    isLoading = isLoadingLyrics,
+                                    currentPositionMs = playbackState.positionMs,
+                                    onSeekToLine = onSeekTo,
+                                    onImportLrcClick = onImportLrcClick,
+                                    onFetchOnlineClick = onFetchOnlineLyricsClick
+                                )
+                            } else {
+                                ArtworkShowcaseStage(
+                                    song = song,
+                                    smoothTransitions = userSettings.smoothArtworkTransitions,
+                                    onSwipeNext = onSkipNext,
+                                    onSwipePrevious = onSkipPrevious,
+                                    onSwipeDownCollapse = onCollapse
+                                )
+                            }
+                        }
 
                         Spacer(modifier = Modifier.height(20.dp))
 
@@ -565,19 +594,26 @@ fun NowPlayingScreen(
                     Spacer(modifier = Modifier.height(24.dp))
                 }
 
-                // 3. Lyrics Card (with 20dp corner radius, white 10% fill, peeking in at bottom)
-                item(key = "lyrics_card") {
-                    LyricsCardSection(
+                // 3. Lyrics Card Preview (Fixed height ~260dp, peeking in at bottom)
+                item(key = "lyrics_card_preview") {
+                    LyricsCardPreview(
                         lyricsDocument = lyricsDocument,
                         isLoading = isLoadingLyrics,
                         currentPositionMs = playbackState.positionMs,
+                        showLyricsInArtworkSpot = showLyricsInArtworkSpot,
+                        onToggleLyricsMode = {
+                            showLyricsInArtworkSpot = !showLyricsInArtworkSpot
+                            if (showLyricsInArtworkSpot) {
+                                coroutineScope.launch { listState.scrollToItem(0) }
+                            }
+                        },
                         onSeekToLine = onSeekTo,
                         onImportLrcClick = onImportLrcClick,
                         onFetchOnlineClick = onFetchOnlineLyricsClick
                     )
                 }
 
-                // 4. Bottom padding so last line scrolls clear of system navigation area
+                // 4. Bottom padding so last content scrolls clear of system navigation area
                 item(key = "bottom_padding") {
                     Spacer(modifier = Modifier.height(140.dp))
                 }
@@ -688,7 +724,137 @@ private fun NowPlayingTopBar(
 }
 
 @Composable
-private fun LyricsCardSection(
+private fun LyricsCardPreview(
+    lyricsDocument: LyricsDocument,
+    isLoading: Boolean,
+    currentPositionMs: Long,
+    showLyricsInArtworkSpot: Boolean,
+    onToggleLyricsMode: () -> Unit,
+    onSeekToLine: (Long) -> Unit,
+    onImportLrcClick: () -> Unit,
+    onFetchOnlineClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val activeLineIndex = remember(lyricsDocument, currentPositionMs) {
+        lyricsDocument.findActiveLineIndex(currentPositionMs).coerceAtLeast(0)
+    }
+
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .height(260.dp)
+            .clip(RoundedCornerShape(20.dp))
+            .background(Color.White.copy(alpha = 0.10f))
+            .padding(20.dp)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+        ) {
+            Text(
+                text = "Lyrics",
+                style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
+                color = NocturnePalette.TextPrimary
+            )
+            Spacer(modifier = Modifier.height(10.dp))
+
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth()
+            ) {
+                when {
+                    isLoading -> {
+                        Box(
+                            modifier = Modifier.fillMaxSize(),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            CircularProgressIndicator(
+                                color = Color.White,
+                                strokeWidth = 2.dp,
+                                modifier = Modifier.size(24.dp)
+                            )
+                        }
+                    }
+                    lyricsDocument.isSynced && lyricsDocument.lines.isNotEmpty() -> {
+                        Column(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            val visibleLines = lyricsDocument.lines.drop(activeLineIndex).take(4)
+                            visibleLines.forEachIndexed { idx, line ->
+                                val isCurrent = idx == 0
+                                Text(
+                                    text = line.text.ifBlank { " " },
+                                    style = MaterialTheme.typography.bodyLarge.copy(
+                                        fontWeight = if (isCurrent) FontWeight.Bold else FontWeight.Normal,
+                                        fontSize = 16.sp
+                                    ),
+                                    color = if (isCurrent) Color.White else Color.White.copy(alpha = 0.55f),
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clickable { onSeekToLine(line.startTimeMs) }
+                                )
+                            }
+                        }
+                    }
+                    !lyricsDocument.isSynced && lyricsDocument.rawText.isNotBlank() -> {
+                        Text(
+                            text = lyricsDocument.rawText,
+                            style = MaterialTheme.typography.bodyMedium.copy(fontSize = 14.sp),
+                            color = Color.White.copy(alpha = 0.85f),
+                            maxLines = 6,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+                    else -> {
+                        Box(
+                            modifier = Modifier.fillMaxSize(),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = "No lyrics found",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = NocturnePalette.TextMuted
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        // Show lyrics / Show artwork button at bottom-left inside card
+        Box(
+            modifier = Modifier
+                .align(Alignment.BottomStart)
+                .heightIn(min = 48.dp)
+                .clickable(onClick = onToggleLyricsMode),
+            contentAlignment = Alignment.CenterStart
+        ) {
+            Box(
+                modifier = Modifier
+                    .height(36.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(Color.White.copy(alpha = 0.18f))
+                    .padding(horizontal = 14.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = if (showLyricsInArtworkSpot) "Show artwork" else "Show lyrics",
+                    style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                    color = Color.White
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun InteractiveLyricsStage(
+    song: Song,
     lyricsDocument: LyricsDocument,
     isLoading: Boolean,
     currentPositionMs: Long,
@@ -697,105 +863,146 @@ private fun LyricsCardSection(
     onFetchOnlineClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val listState = rememberLazyListState()
     val activeLineIndex = remember(lyricsDocument, currentPositionMs) {
         lyricsDocument.findActiveLineIndex(currentPositionMs)
+    }
+
+    var userManualScrollActive by remember { mutableStateOf(false) }
+    var lastManualInteractionMs by remember { mutableLongStateOf(0L) }
+
+    LaunchedEffect(listState.isScrollInProgress) {
+        if (listState.isScrollInProgress) {
+            userManualScrollActive = true
+            lastManualInteractionMs = System.currentTimeMillis()
+        } else if (userManualScrollActive) {
+            delay(3200L)
+            if (System.currentTimeMillis() - lastManualInteractionMs >= 3000L) {
+                userManualScrollActive = false
+            }
+        }
+    }
+
+    LaunchedEffect(activeLineIndex, userManualScrollActive, lyricsDocument.songId) {
+        if (!userManualScrollActive && lyricsDocument.isSynced && activeLineIndex >= 0) {
+            runCatching {
+                listState.animateScrollToItem(
+                    index = activeLineIndex,
+                    scrollOffset = -140
+                )
+            }
+        }
     }
 
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(20.dp))
-            .background(Color.White.copy(alpha = 0.10f))
-            .padding(20.dp)
-    ) {
-        Column(modifier = Modifier.fillMaxWidth()) {
-            Text(
-                text = "Lyrics",
-                style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
-                color = NocturnePalette.TextPrimary
-            )
-            Spacer(modifier = Modifier.height(14.dp))
-
-            when {
-                isLoading -> {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(120.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        CircularProgressIndicator(
-                            color = Color.White,
-                            strokeWidth = 2.dp,
-                            modifier = Modifier.size(28.dp)
-                        )
-                    }
+            .aspectRatio(1f)
+            .drawWithCache {
+                val brush = Brush.verticalGradient(
+                    colors = listOf(Color.Transparent, Color.White, Color.White, Color.Transparent),
+                    startY = 0f,
+                    endY = size.height
+                )
+                onDrawWithContent {
+                    drawContent()
                 }
-                lyricsDocument.isSynced && lyricsDocument.lines.isNotEmpty() -> {
-                    lyricsDocument.lines.forEachIndexed { index, line ->
+            }
+    ) {
+        when {
+            isLoading -> {
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    CircularProgressIndicator(
+                        color = Color.White,
+                        strokeWidth = 2.5.dp,
+                        modifier = Modifier.size(32.dp)
+                    )
+                }
+            }
+            lyricsDocument.isSynced && lyricsDocument.lines.isNotEmpty() -> {
+                LazyColumn(
+                    state = listState,
+                    contentPadding = PaddingValues(vertical = 60.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp),
+                    modifier = Modifier
+                        .fillMaxSize()
+                ) {
+                    itemsIndexed(
+                        items = lyricsDocument.lines,
+                        key = { _, line -> line.startTimeMs }
+                    ) { index, line ->
                         val isActive = index == activeLineIndex
                         Text(
                             text = line.text.ifBlank { " " },
-                            style = MaterialTheme.typography.bodyLarge.copy(
+                            style = MaterialTheme.typography.headlineSmall.copy(
                                 fontWeight = if (isActive) FontWeight.Bold else FontWeight.Normal,
-                                fontSize = 16.sp
+                                fontSize = 23.sp
                             ),
-                            color = if (isActive) Color.White else Color.White.copy(alpha = 0.55f),
+                            color = if (isActive) Color.White else Color.White.copy(alpha = 0.45f),
+                            textAlign = TextAlign.Start,
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clickable { onSeekToLine(line.startTimeMs) }
-                                .padding(vertical = 8.dp)
+                                .padding(horizontal = 4.dp, vertical = 2.dp)
                         )
                     }
                 }
-                !lyricsDocument.isSynced && lyricsDocument.rawText.isNotBlank() -> {
-                    Text(
-                        text = lyricsDocument.rawText,
-                        style = MaterialTheme.typography.bodyMedium.copy(fontSize = 15.sp),
-                        color = Color.White.copy(alpha = 0.85f),
-                        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)
-                    )
-                }
-                else -> {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 24.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
+            }
+            !lyricsDocument.isSynced && lyricsDocument.rawText.isNotBlank() -> {
+                LazyColumn(
+                    contentPadding = PaddingValues(vertical = 20.dp),
+                    modifier = Modifier.fillMaxSize()
+                ) {
+                    item {
                         Text(
-                            text = "No lyrics found",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = NocturnePalette.TextMuted
+                            text = lyricsDocument.rawText,
+                            style = MaterialTheme.typography.bodyLarge.copy(fontSize = 18.sp),
+                            color = Color.White.copy(alpha = 0.85f),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 4.dp)
                         )
-                        Spacer(modifier = Modifier.height(12.dp))
-                        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                            Box(
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(10.dp))
-                                    .background(Color.White.copy(alpha = 0.15f))
-                                    .clickable(onClick = onFetchOnlineClick)
-                                    .padding(horizontal = 12.dp, vertical = 8.dp)
-                            ) {
-                                Text(
-                                    text = "Search Online",
-                                    style = MaterialTheme.typography.labelMedium,
-                                    color = Color.White
-                                )
-                            }
-                            Box(
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(10.dp))
-                                    .background(Color.White.copy(alpha = 0.15f))
-                                    .clickable(onClick = onImportLrcClick)
-                                    .padding(horizontal = 12.dp, vertical = 8.dp)
-                            ) {
-                                Text(
-                                    text = "Import .LRC",
-                                    style = MaterialTheme.typography.labelMedium,
-                                    color = Color.White
-                                )
-                            }
+                    }
+                }
+            }
+            else -> {
+                Column(
+                    modifier = Modifier.fillMaxSize(),
+                    verticalArrangement = Arrangement.Center,
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text(
+                        text = "No lyrics found",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = NocturnePalette.TextMuted
+                    )
+                    Spacer(modifier = Modifier.height(14.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(Color.White.copy(alpha = 0.18f))
+                                .clickable(onClick = onFetchOnlineClick)
+                                .padding(horizontal = 14.dp, vertical = 10.dp)
+                        ) {
+                            Text(
+                                text = "Search Online",
+                                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                                color = Color.White
+                            )
+                        }
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(Color.White.copy(alpha = 0.18f))
+                                .clickable(onClick = onImportLrcClick)
+                                .padding(horizontal = 14.dp, vertical = 10.dp)
+                        ) {
+                            Text(
+                                text = "Import .LRC",
+                                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                                color = Color.White
+                            )
                         }
                     }
                 }
