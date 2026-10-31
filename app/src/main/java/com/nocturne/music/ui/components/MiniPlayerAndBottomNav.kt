@@ -43,7 +43,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithCache
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
+import androidx.compose.foundation.border
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -70,6 +74,7 @@ enum class PrimaryDestination(
 @Composable
 fun PersistentMiniPlayer(
     playbackState: PlaybackUiState,
+    songColor: Color,
     onExpandNowPlaying: () -> Unit,
     onTogglePlayPause: () -> Unit,
     onSkipNext: () -> Unit,
@@ -88,13 +93,49 @@ fun PersistentMiniPlayer(
         modifier = modifier
     ) {
         if (song != null) {
-            val shape = RoundedCornerShape(18.dp)
+            val shape = RoundedCornerShape(20.dp)
+            val animatedColor by androidx.compose.animation.animateColorAsState(targetValue = songColor, animationSpec = androidx.compose.animation.core.tween(500), label = "miniPlayerColor")
+
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 12.dp, vertical = 6.dp)
+                    .padding(bottom = 4.dp)
+                    .shadow(
+                        elevation = 12.dp,
+                        shape = shape,
+                        ambientColor = animatedColor,
+                        spotColor = animatedColor
+                    )
                     .clip(shape)
-                    .background(NocturnePalette.CharcoalSurface)
+                    .background(NocturnePalette.ObsidianSurface)
+                    .background(
+                        brush = Brush.verticalGradient(
+                            colors = listOf(
+                                animatedColor,
+                                animatedColor.copy(alpha = 0.95f)
+                            )
+                        )
+                    )
+                    .drawWithCache {
+                        onDrawWithContent {
+                            drawContent()
+                            drawRect(
+                                brush = Brush.verticalGradient(
+                                    colors = listOf(Color.White.copy(alpha = 0.10f), Color.Transparent),
+                                    startY = 0f,
+                                    endY = size.height * 0.4f
+                                )
+                            )
+                        }
+                    }
+                    .border(
+                        width = 1.dp,
+                        brush = Brush.verticalGradient(
+                            colors = listOf(Color.White.copy(alpha = 0.35f), Color.White.copy(alpha = 0.08f))
+                        ),
+                        shape = shape
+                    )
                     .pointerInput(song.id) {
                         detectHorizontalDragGestures(
                             onDragStart = { dragAccumulated = 0f },

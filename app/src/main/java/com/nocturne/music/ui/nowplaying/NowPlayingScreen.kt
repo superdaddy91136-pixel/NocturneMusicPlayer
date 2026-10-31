@@ -105,6 +105,7 @@ enum class NowPlayingPane(val label: String) {
 
 @Composable
 fun NowPlayingScreen(
+    songColor: Color,
     playbackState: PlaybackUiState,
     lyricsDocument: LyricsDocument,
     isLoadingLyrics: Boolean,
@@ -158,20 +159,35 @@ fun NowPlayingScreen(
         playbackState.positionMs
     }
 
+    val animatedColor by androidx.compose.animation.animateColorAsState(
+        targetValue = songColor,
+        animationSpec = tween(500),
+        label = "npBgColor"
+    )
+
     Box(
         modifier = modifier
             .fillMaxSize()
-            .artworkAmbientCanvas(
-                atmosphere = atmosphere,
-                style = userSettings.dynamicBackgroundStyle,
-                intensity = 1.0f
-            )
-            .statusBarsPadding()
-            .navigationBarsPadding()
+            .background(NocturnePalette.AmoledBlack)
+            .pointerInput(Unit) { detectTapGestures { } }
     ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(
+                    brush = androidx.compose.ui.graphics.Brush.verticalGradient(
+                        colors = listOf(
+                            animatedColor,
+                            NocturnePalette.AmoledBlack
+                        )
+                    )
+                )
+        )
         Column(
             modifier = Modifier
                 .fillMaxSize()
+                .statusBarsPadding()
+                .navigationBarsPadding()
                 .padding(horizontal = 16.dp, vertical = 10.dp), // 16dp horizontal padding so artwork has 16dp margins
             horizontalAlignment = Alignment.CenterHorizontally
         ) {

@@ -53,7 +53,8 @@ class NocturneViewModel @Inject constructor(
     private val playbackController: PlaybackController,
     private val lyricsRepository: LyricsRepository,
     private val preferencesRepository: UserPreferencesRepository,
-    val artworkManager: com.nocturne.music.library.ArtworkManager
+    val artworkManager: com.nocturne.music.library.ArtworkManager,
+    private val isolatedArtworkColorExtractor: com.nocturne.music.designsystem.IsolatedArtworkColorExtractor
 ) : ViewModel() {
 
     val playbackState: StateFlow<PlaybackUiState> = playbackController.playbackState
@@ -117,6 +118,9 @@ class NocturneViewModel @Inject constructor(
     private val _artworkAtmosphere = MutableStateFlow(ArtworkAtmosphere())
     val artworkAtmosphere: StateFlow<ArtworkAtmosphere> = _artworkAtmosphere.asStateFlow()
 
+    private val _currentSongColor = MutableStateFlow(androidx.compose.ui.graphics.Color(0xFF141720))
+    val currentSongColor: StateFlow<androidx.compose.ui.graphics.Color> = _currentSongColor.asStateFlow()
+
     private val _currentLyrics = MutableStateFlow(
         LyricsDocument(songId = -1L, isSynced = false, hasWordSync = false, source = LyricsSource.NONE)
     )
@@ -156,8 +160,11 @@ class NocturneViewModel @Inject constructor(
         viewModelScope.launch {
             playbackState
                 .map { it.currentSong }
-                .distinctUntilChanged { old, new -> old?.id == new?.id && old?.albumArtUri == new?.albumArtUri }
+                .distinctUntilChanged { old, new -> old?.id == new?.id && old?.albumArtUri == new?.albumArtUri && old?.customArtworkUpdatedAtMs == new?.customArtworkUpdatedAtMs }
                 .collectLatest { song ->
+                    viewModelScope.launch {
+                        _currentSongColor.value = isolatedArtworkColorExtractor.getArtworkColor(song)
+                    }
                     _currentLyrics.value = if (song == null) {
                         LyricsDocument(songId = -1L, isSynced = false, hasWordSync = false, source = LyricsSource.NONE)
                     } else {

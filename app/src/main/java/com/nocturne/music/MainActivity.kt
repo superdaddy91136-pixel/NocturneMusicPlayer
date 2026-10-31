@@ -216,12 +216,10 @@ fun NocturneRootApp(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .artworkAmbientCanvas(
-                atmosphere = atmosphere,
-                style = userSettings.dynamicBackgroundStyle,
-                intensity = 0.55f
-            )
+            .background(NocturnePalette.AmoledBlack)
     ) {
+        val songColor by viewModel.currentSongColor.collectAsStateWithLifecycle()
+
         Scaffold(
             containerColor = Color.Transparent,
             snackbarHost = { SnackbarHost(hostState = snackbarHostState) }
@@ -388,6 +386,7 @@ fun NocturneRootApp(
                     .align(Alignment.BottomCenter)
             ) {
                 PersistentMiniPlayer(
+                    songColor = songColor,
                     playbackState = playbackState,
                     onExpandNowPlaying = { isNowPlayingExpanded = true },
                     onTogglePlayPause = viewModel::togglePlayPause,
@@ -435,6 +434,7 @@ fun NocturneRootApp(
             exit = slideOutVertically(targetOffsetY = { it }, animationSpec = tween(300)) + fadeOut(tween(220))
         ) {
             NowPlayingScreen(
+                songColor = songColor,
                 playbackState = playbackState,
                 lyricsDocument = currentLyrics,
                 isLoadingLyrics = isLoadingLyrics,
