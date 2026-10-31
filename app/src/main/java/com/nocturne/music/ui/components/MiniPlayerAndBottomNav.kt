@@ -262,7 +262,6 @@ fun NocturneBottomNavigationBar(
         ) {
             PrimaryDestination.entries.forEach { dest ->
                 val selected = currentRoute.startsWith(dest.route)
-                val alpha = if (selected) 1.0f else 0.6f
 
                 Box(
                     modifier = Modifier
@@ -273,31 +272,39 @@ fun NocturneBottomNavigationBar(
                 ) {
                     when (dest) {
                         PrimaryDestination.HOME -> {
-                            Icon(
-                                painter = painterResource(id = R.drawable.ic_home_custom),
-                                contentDescription = dest.label,
-                                tint = Color.White,
-                                modifier = Modifier
-                                    .size(30.dp)
-                                    .graphicsLayer(alpha = alpha, shadowElevation = 8f)
-                            )
+                            androidx.compose.animation.Crossfade(targetState = selected, animationSpec = androidx.compose.animation.core.tween(120), label = "homeIconCrossfade") { isSelected ->
+                                Icon(
+                                    painter = painterResource(id = if (isSelected) R.drawable.ic_home_filled_custom else R.drawable.ic_home_custom),
+                                    contentDescription = dest.label,
+                                    tint = if (isSelected) Color.White else Color.White.copy(alpha = 0.6f),
+                                    modifier = Modifier
+                                        .size(30.dp)
+                                        .graphicsLayer(shadowElevation = 8f)
+                                )
+                            }
                         }
                         PrimaryDestination.LIBRARY -> {
-                            Icon(
-                                painter = painterResource(id = R.drawable.ic_library_custom),
-                                contentDescription = dest.label,
-                                tint = Color.White,
-                                modifier = Modifier
-                                    .size(30.dp)
-                                    .graphicsLayer(alpha = alpha, shadowElevation = 8f)
-                            )
+                            androidx.compose.animation.Crossfade(targetState = selected, animationSpec = androidx.compose.animation.core.tween(120), label = "libraryIconCrossfade") { isSelected ->
+                                Icon(
+                                    painter = painterResource(id = if (isSelected) R.drawable.ic_library_filled_custom else R.drawable.ic_library_custom),
+                                    contentDescription = dest.label,
+                                    tint = if (isSelected) Color.White else Color.White.copy(alpha = 0.6f),
+                                    modifier = Modifier
+                                        .size(30.dp)
+                                        .graphicsLayer(shadowElevation = 8f)
+                                )
+                            }
                         }
                         else -> {
-                            val contentColor = if (selected) Color.White else Color.White.copy(alpha = 0.6f)
+                            val tintColor by androidx.compose.animation.animateColorAsState(
+                                targetValue = if (selected) Color.White else Color.White.copy(alpha = 0.6f),
+                                animationSpec = androidx.compose.animation.core.tween(120),
+                                label = "searchTint"
+                            )
                             Icon(
                                 imageVector = dest.icon,
                                 contentDescription = dest.label,
-                                tint = contentColor,
+                                tint = tintColor,
                                 modifier = Modifier
                                     .size(30.dp)
                                     .graphicsLayer(shadowElevation = 8f)
