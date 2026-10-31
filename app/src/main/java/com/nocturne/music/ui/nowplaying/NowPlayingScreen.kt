@@ -188,7 +188,7 @@ fun NowPlayingScreen(
                 .fillMaxSize()
                 .statusBarsPadding()
                 .navigationBarsPadding()
-                .padding(horizontal = 16.dp, vertical = 10.dp), // 16dp horizontal padding so artwork has 16dp margins
+                .padding(horizontal = 12.dp, vertical = 8.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             // Top bar: collapse handle, pane switcher pill, three-dot menu
@@ -203,14 +203,14 @@ fun NowPlayingScreen(
                 onMoreClick = { onOpenTrackContext(song) }
             )
 
-            Spacer(modifier = Modifier.height(10.dp))
+            Spacer(modifier = Modifier.height(4.dp))
 
             // Centerpiece stage (Artwork / Synchronized Lyrics / Interactive Queue)
             Box(
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxWidth(),
-                contentAlignment = Alignment.Center
+                contentAlignment = Alignment.TopCenter
             ) {
                 AnimatedContent(
                     targetState = activePane,
@@ -795,7 +795,6 @@ private fun ArtworkShowcaseStage(
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp) // Exactly 16dp horizontal margins
             .aspectRatio(1f)
             .scale(artworkScale)
             .pointerInput(song.id) {
