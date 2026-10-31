@@ -7,6 +7,7 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -38,6 +39,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.nocturne.music.designsystem.LocalArtworkAtmosphere
@@ -309,7 +311,8 @@ fun AlbumArtworkCard(
     val cardShape = RoundedCornerShape(16.dp)
     Column(
         modifier = modifier
-            .matteSurface(shape = cardShape, surfaceColor = NocturnePalette.ObsidianSurface)
+            .background(color = NocturnePalette.ObsidianSurface, shape = cardShape)
+            .border(width = 0.6.dp, color = NocturnePalette.GlassBorderHairline, shape = cardShape)
             .clickable(onClick = onClick)
             .padding(10.dp)
     ) {
@@ -317,6 +320,7 @@ fun AlbumArtworkCard(
             modifier = Modifier
                 .fillMaxWidth()
                 .aspectRatio(1f)
+                .clip(RoundedCornerShape(12.dp))
         ) {
             ArtworkImage(
                 artworkUri = album.albumArtUri,
@@ -333,7 +337,9 @@ fun AlbumArtworkCard(
             style = MaterialTheme.typography.titleMedium,
             color = NocturnePalette.TextPrimary,
             maxLines = 1,
-            overflow = TextOverflow.Ellipsis
+            overflow = TextOverflow.Ellipsis,
+            textAlign = TextAlign.Start,
+            modifier = Modifier.fillMaxWidth()
         )
         Spacer(modifier = Modifier.height(2.dp))
         Text(
@@ -341,14 +347,18 @@ fun AlbumArtworkCard(
             style = MaterialTheme.typography.bodySmall,
             color = NocturnePalette.TextSecondary,
             maxLines = 1,
-            overflow = TextOverflow.Ellipsis
+            overflow = TextOverflow.Ellipsis,
+            textAlign = TextAlign.Start,
+            modifier = Modifier.fillMaxWidth()
         )
         Spacer(modifier = Modifier.height(2.dp))
         Text(
             text = if (album.year > 0) "${album.year} • ${album.songCount} tracks" else "${album.songCount} tracks",
             style = MaterialTheme.typography.labelSmall,
             color = NocturnePalette.TextMuted,
-            maxLines = 1
+            maxLines = 1,
+            textAlign = TextAlign.Start,
+            modifier = Modifier.fillMaxWidth()
         )
     }
 }
@@ -361,7 +371,6 @@ fun ArtistArtworkCard(
 ) {
     Column(
         modifier = modifier
-            .clip(RoundedCornerShape(16.dp))
             .clickable(onClick = onClick)
             .padding(10.dp),
         horizontalAlignment = Alignment.CenterHorizontally

@@ -17,6 +17,8 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -221,33 +223,8 @@ fun NocturneRootApp(
             )
     ) {
         Scaffold(
-            containerColor = androidx.compose.ui.graphics.Color.Transparent,
-            snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
-            bottomBar = {
-                if (!isNowPlayingExpanded) {
-                    Column(modifier = Modifier.fillMaxWidth()) {
-                        PersistentMiniPlayer(
-                            playbackState = playbackState,
-                            onExpandNowPlaying = { isNowPlayingExpanded = true },
-                            onTogglePlayPause = viewModel::togglePlayPause,
-                            onSkipNext = viewModel::skipToNext,
-                            onSkipPrevious = viewModel::skipToPrevious,
-                            onToggleFavorite = {
-                                playbackState.currentSong?.let { viewModel.toggleSongFavorite(it) }
-                            }
-                        )
-                        NocturneBottomNavigationBar(
-                            currentRoute = currentDestination.route,
-                            onNavigate = { dest ->
-                                isSettingsOpen = false
-                                isRecentsOpen = false
-                                externalLibraryDrillDown = null
-                                currentDestination = dest
-                            }
-                        )
-                    }
-                }
-            }
+            containerColor = Color.Transparent,
+            snackbarHost = { SnackbarHost(hostState = snackbarHostState) }
         ) { innerPadding ->
             Box(
                 modifier = Modifier
@@ -400,6 +377,53 @@ fun NocturneRootApp(
                             onOpenTrackContext = { contextMenuSong = it }
                         )
                     }
+                }
+            }
+        }
+
+        if (!isNowPlayingExpanded) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .align(Alignment.BottomCenter)
+            ) {
+                PersistentMiniPlayer(
+                    playbackState = playbackState,
+                    onExpandNowPlaying = { isNowPlayingExpanded = true },
+                    onTogglePlayPause = viewModel::togglePlayPause,
+                    onSkipNext = viewModel::skipToNext,
+                    onSkipPrevious = viewModel::skipToPrevious,
+                    onToggleFavorite = {
+                        playbackState.currentSong?.let { viewModel.toggleSongFavorite(it) }
+                    }
+                )
+
+                Box(
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(100.dp)
+                            .align(Alignment.BottomCenter)
+                            .background(
+                                brush = Brush.verticalGradient(
+                                    0.0f to Color.Transparent,
+                                    0.35f to Color.Black.copy(alpha = 0.25f),
+                                    0.70f to Color.Black.copy(alpha = 0.50f),
+                                    1.0f to Color.Black.copy(alpha = 0.65f)
+                                )
+                            )
+                    )
+                    NocturneBottomNavigationBar(
+                        currentRoute = currentDestination.route,
+                        onNavigate = { dest ->
+                            isSettingsOpen = false
+                            isRecentsOpen = false
+                            externalLibraryDrillDown = null
+                            currentDestination = dest
+                        }
+                    )
                 }
             }
         }

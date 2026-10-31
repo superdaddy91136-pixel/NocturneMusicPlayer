@@ -40,6 +40,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.nocturne.music.designsystem.LocalArtworkAtmosphere
@@ -360,10 +361,13 @@ private fun TrackArtworkSquareCard(
     Column(
         modifier = Modifier
             .width(142.dp)
-            .clip(RoundedCornerShape(14.dp))
             .clickable(onClick = onClick)
     ) {
-        Box(modifier = Modifier.size(142.dp)) {
+        Box(
+            modifier = Modifier
+                .size(142.dp)
+                .clip(RoundedCornerShape(14.dp))
+        ) {
             ArtworkImage(
                 artworkUri = song.albumArtUri,
                 artworkKey = "${song.id}_${song.customArtworkUpdatedAtMs}",
@@ -374,19 +378,23 @@ private fun TrackArtworkSquareCard(
                 modifier = Modifier.fillMaxSize()
             )
         }
-        Spacer(modifier = Modifier.height(8.dp))
+        Spacer(modifier = Modifier.height(6.dp))
         Text(
             text = song.title,
             style = MaterialTheme.typography.titleSmall.copy(color = NocturnePalette.TextPrimary),
             maxLines = 1,
-            overflow = TextOverflow.Ellipsis
+            overflow = TextOverflow.Ellipsis,
+            textAlign = TextAlign.Start,
+            modifier = Modifier.fillMaxWidth()
         )
         Text(
             text = song.artist,
             style = MaterialTheme.typography.bodySmall,
             color = NocturnePalette.TextMuted,
             maxLines = 1,
-            overflow = TextOverflow.Ellipsis
+            overflow = TextOverflow.Ellipsis,
+            textAlign = TextAlign.Start,
+            modifier = Modifier.fillMaxWidth()
         )
     }
 }

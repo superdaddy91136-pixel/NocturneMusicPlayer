@@ -26,6 +26,7 @@ import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.Lyrics
 import androidx.compose.material.icons.rounded.PlayCircle
 import androidx.compose.material.icons.rounded.Storage
+import androidx.compose.ui.graphics.Color
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -529,13 +530,29 @@ private fun SettingsGroupCard(
 }
 
 @Composable
+fun AppSwitchColors() = SwitchDefaults.colors(
+    checkedThumbColor = Color(0xFF0B1A12),
+    checkedTrackColor = Color(0xFF57CF8F),
+    checkedBorderColor = Color(0xFF57CF8F),
+    uncheckedThumbColor = Color.White.copy(alpha = 0.60f),
+    uncheckedTrackColor = Color.White.copy(alpha = 0.12f),
+    uncheckedBorderColor = Color.White.copy(alpha = 0.24f),
+    disabledCheckedThumbColor = Color(0xFF0B1A12).copy(alpha = 0.38f),
+    disabledCheckedTrackColor = Color(0xFF57CF8F).copy(alpha = 0.38f),
+    disabledCheckedBorderColor = Color(0xFF57CF8F).copy(alpha = 0.38f),
+    disabledUncheckedThumbColor = Color.White.copy(alpha = 0.22f),
+    disabledUncheckedTrackColor = Color.White.copy(alpha = 0.05f),
+    disabledUncheckedBorderColor = Color.White.copy(alpha = 0.09f)
+)
+
+@Composable
 private fun SettingsToggleRow(
     title: String,
     subtitle: String,
     checked: Boolean,
-    onCheckedChange: (Boolean) -> Unit
+    onCheckedChange: (Boolean) -> Unit,
+    enabled: Boolean = true
 ) {
-    val atmosphere = LocalArtworkAtmosphere.current
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -550,7 +567,8 @@ private fun SettingsToggleRow(
         Switch(
             checked = checked,
             onCheckedChange = onCheckedChange,
-            colors = SwitchDefaults.colors(checkedThumbColor = atmosphere.primaryAccent)
+            enabled = enabled,
+            colors = AppSwitchColors()
         )
     }
 }

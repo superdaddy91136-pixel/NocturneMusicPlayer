@@ -48,7 +48,7 @@ fun RecentsScreen(
         modifier = modifier
             .fillMaxSize()
             .statusBarsPadding()
-            .padding(bottom = 120.dp)
+            .padding(bottom = 160.dp)
     ) {
         // Top Header
         Row(

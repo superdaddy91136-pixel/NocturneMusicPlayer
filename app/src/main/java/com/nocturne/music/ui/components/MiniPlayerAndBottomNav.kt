@@ -55,7 +55,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.nocturne.music.designsystem.LocalArtworkAtmosphere
 import com.nocturne.music.designsystem.NocturnePalette
-import com.nocturne.music.designsystem.liquidGlassPanel
 import com.nocturne.music.model.PlaybackUiState
 
 enum class PrimaryDestination(
@@ -208,18 +207,10 @@ fun NocturneBottomNavigationBar(
     onNavigate: (PrimaryDestination) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val atmosphere = LocalArtworkAtmosphere.current
-    val navShape = RoundedCornerShape(topStart = 22.dp, topEnd = 22.dp)
-
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .liquidGlassPanel(
-                shape = navShape,
-                tintColor = atmosphere.primaryAccent,
-                fillAlpha = 0.09f,
-                borderAlpha = 0f
-            )
+            .background(Color.Transparent)
             .navigationBarsPadding()
             .padding(horizontal = 20.dp, vertical = 10.dp)
     ) {
@@ -230,11 +221,7 @@ fun NocturneBottomNavigationBar(
         ) {
             PrimaryDestination.entries.forEach { dest ->
                 val selected = currentRoute.startsWith(dest.route)
-                val contentColor = if (selected) {
-                    Color.White
-                } else {
-                    Color.White.copy(alpha = 0.6f)
-                }
+                val alpha = if (selected) 1.0f else 0.6f
 
                 Box(
                     modifier = Modifier
@@ -243,7 +230,6 @@ fun NocturneBottomNavigationBar(
                         .padding(14.dp),
                     contentAlignment = Alignment.Center
                 ) {
-                    val alpha = if (selected) 1.0f else 0.6f
                     when (dest) {
                         PrimaryDestination.HOME -> {
                             Icon(
@@ -252,7 +238,7 @@ fun NocturneBottomNavigationBar(
                                 tint = Color.White,
                                 modifier = Modifier
                                     .size(30.dp)
-                                    .graphicsLayer(alpha = alpha)
+                                    .graphicsLayer(alpha = alpha, shadowElevation = 8f)
                             )
                         }
                         PrimaryDestination.LIBRARY -> {
@@ -262,15 +248,18 @@ fun NocturneBottomNavigationBar(
                                 tint = Color.White,
                                 modifier = Modifier
                                     .size(30.dp)
-                                    .graphicsLayer(alpha = alpha)
+                                    .graphicsLayer(alpha = alpha, shadowElevation = 8f)
                             )
                         }
                         else -> {
+                            val contentColor = if (selected) Color.White else Color.White.copy(alpha = 0.6f)
                             Icon(
                                 imageVector = dest.icon,
                                 contentDescription = dest.label,
                                 tint = contentColor,
-                                modifier = Modifier.size(30.dp)
+                                modifier = Modifier
+                                    .size(30.dp)
+                                    .graphicsLayer(shadowElevation = 8f)
                             )
                         }
                     }
