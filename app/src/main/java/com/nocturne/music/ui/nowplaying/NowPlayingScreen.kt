@@ -142,6 +142,7 @@ fun NowPlayingScreen(
     onAdjustLyricsOffsetMs: (Long) -> Unit,
     onNavigateToAlbum: (Long) -> Unit,
     onNavigateToArtist: (Long) -> Unit,
+    onToggleLyricsMode: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val song = playbackState.currentSong ?: return
@@ -618,6 +619,7 @@ fun NowPlayingScreen(
                             showLyricsInArtworkSpot = !showLyricsInArtworkSpot
                             if (showLyricsInArtworkSpot) {
                                 coroutineScope.launch { listState.scrollToItem(0) }
+                                onToggleLyricsMode()
                             }
                         },
                         onSeekToLine = onSeekTo,
@@ -881,7 +883,7 @@ private fun LyricsCardPreview(
 }
 
 @Composable
-private fun InteractiveLyricsStage(
+fun InteractiveLyricsStage(
     song: Song,
     lyricsDocument: LyricsDocument,
     isLoading: Boolean,

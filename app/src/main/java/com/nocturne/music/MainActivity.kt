@@ -11,6 +11,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -73,6 +74,7 @@ import com.nocturne.music.ui.home.RecentsScreen
 import com.nocturne.music.ui.library.LibraryDrillDown
 import com.nocturne.music.ui.library.LibraryScreen
 import com.nocturne.music.ui.nowplaying.NowPlayingScreen
+import com.nocturne.music.ui.nowplaying.LyricsFocusScreen
 import com.nocturne.music.ui.search.SearchScreen
 import com.nocturne.music.ui.settings.SettingsScreen
 import com.nocturne.music.ui.viewmodel.NocturneViewModel
@@ -433,45 +435,70 @@ fun NocturneRootApp(
             enter = slideInVertically(initialOffsetY = { it }, animationSpec = tween(340)) + fadeIn(tween(260)),
             exit = slideOutVertically(targetOffsetY = { it }, animationSpec = tween(300)) + fadeOut(tween(220))
         ) {
-            NowPlayingScreen(
-                songColor = songColor,
-                playbackState = playbackState,
-                lyricsDocument = currentLyrics,
-                isLoadingLyrics = isLoadingLyrics,
-                userSettings = userSettings,
-                onCollapse = { isNowPlayingExpanded = false },
-                onTogglePlayPause = viewModel::togglePlayPause,
-                onSeekTo = viewModel::seekTo,
-                onSkipNext = viewModel::skipToNext,
-                onSkipPrevious = viewModel::skipToPrevious,
-                onSetPlaybackMode = viewModel::setPlaybackMode,
-                onPostStatusMessage = viewModel::postStatusMessage,
-                onToggleFavorite = viewModel::toggleSongFavorite,
-                onSelectQueueIndex = viewModel::selectQueueItem,
-                onMoveQueueItem = viewModel::moveQueueItem,
-                onRemoveQueueItem = viewModel::removeQueueItem,
-                onOpenTrackContext = { contextMenuSong = it },
-                onOpenSleepTimer = { showSleepTimerSheet = true },
-                onOpenEqualizer = { showEqualizerSheet = true },
-                onOpenPlaybackSpeed = { showPlaybackSpeedSheet = true },
-                onEditArtworkClick = { editArtworkSong = playbackState.currentSong },
-                onImportLrcClick = {
-                    lrcPickerLauncher.launch(arrayOf("*/*"))
-                },
-                onEditLyricsClick = { showManualLyricsDialog = true },
-                onFetchOnlineLyricsClick = viewModel::fetchOnlineLyricsForCurrentSong,
-                onAdjustLyricsOffsetMs = viewModel::adjustLyricsOffset,
-                onNavigateToAlbum = { albumId ->
-                    isNowPlayingExpanded = false
-                    externalLibraryDrillDown = LibraryDrillDown.AlbumDetail(albumId)
-                    currentDestination = PrimaryDestination.LIBRARY
-                },
-                onNavigateToArtist = { artistId ->
-                    isNowPlayingExpanded = false
-                    externalLibraryDrillDown = LibraryDrillDown.ArtistDetail(artistId)
-                    currentDestination = PrimaryDestination.LIBRARY
+            var focusLyricsMode by remember { mutableStateOf(false) }
+            
+            Crossfade(
+                targetState = focusLyricsMode,
+                animationSpec = tween(250),
+                label = "nowPlayingFocusCrossfade"
+            ) { isFocusMode ->
+                if (isFocusMode) {
+                    LyricsFocusScreen(
+                        songColor = songColor,
+                        playbackState = playbackState,
+                        lyricsDocument = currentLyrics,
+                        isLoadingLyrics = isLoadingLyrics,
+                        onCollapse = { isNowPlayingExpanded = false },
+                        onExitLyricsMode = { focusLyricsMode = false },
+                        onTogglePlayPause = viewModel::togglePlayPause,
+                        onSeekTo = viewModel::seekTo,
+                        onImportLrcClick = { lrcPickerLauncher.launch(arrayOf("*/*")) },
+                        onFetchOnlineClick = viewModel::fetchOnlineLyricsForCurrentSong,
+                        onOpenTrackContext = { contextMenuSong = it }
+                    )
+                } else {
+                    NowPlayingScreen(
+                        songColor = songColor,
+                        playbackState = playbackState,
+                        lyricsDocument = currentLyrics,
+                        isLoadingLyrics = isLoadingLyrics,
+                        userSettings = userSettings,
+                        onCollapse = { isNowPlayingExpanded = false },
+                        onTogglePlayPause = viewModel::togglePlayPause,
+                        onSeekTo = viewModel::seekTo,
+                        onSkipNext = viewModel::skipToNext,
+                        onSkipPrevious = viewModel::skipToPrevious,
+                        onSetPlaybackMode = viewModel::setPlaybackMode,
+                        onPostStatusMessage = viewModel::postStatusMessage,
+                        onToggleFavorite = viewModel::toggleSongFavorite,
+                        onSelectQueueIndex = viewModel::selectQueueItem,
+                        onMoveQueueItem = viewModel::moveQueueItem,
+                        onRemoveQueueItem = viewModel::removeQueueItem,
+                        onOpenTrackContext = { contextMenuSong = it },
+                        onOpenSleepTimer = { showSleepTimerSheet = true },
+                        onOpenEqualizer = { showEqualizerSheet = true },
+                        onOpenPlaybackSpeed = { showPlaybackSpeedSheet = true },
+                        onEditArtworkClick = { editArtworkSong = playbackState.currentSong },
+                        onImportLrcClick = {
+                            lrcPickerLauncher.launch(arrayOf("*/*"))
+                        },
+                        onEditLyricsClick = { showManualLyricsDialog = true },
+                        onFetchOnlineLyricsClick = viewModel::fetchOnlineLyricsForCurrentSong,
+                        onAdjustLyricsOffsetMs = viewModel::adjustLyricsOffset,
+                        onNavigateToAlbum = { albumId ->
+                            isNowPlayingExpanded = false
+                            externalLibraryDrillDown = LibraryDrillDown.AlbumDetail(albumId)
+                            currentDestination = PrimaryDestination.LIBRARY
+                        },
+                        onNavigateToArtist = { artistId ->
+                            isNowPlayingExpanded = false
+                            externalLibraryDrillDown = LibraryDrillDown.ArtistDetail(artistId)
+                            currentDestination = PrimaryDestination.LIBRARY
+                        },
+                        onToggleLyricsMode = { focusLyricsMode = true }
+                    )
                 }
-            )
+            }
         }
 
         // Context Menu & Interactive Dialogs
