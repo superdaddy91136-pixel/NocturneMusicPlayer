@@ -188,7 +188,7 @@ fun NowPlayingScreen(
                 .fillMaxSize()
                 .statusBarsPadding()
                 .navigationBarsPadding()
-                .padding(horizontal = 12.dp, vertical = 8.dp),
+                .padding(horizontal = 20.dp, vertical = 4.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             // Top bar: collapse handle, pane switcher pill, three-dot menu
@@ -203,13 +203,13 @@ fun NowPlayingScreen(
                 onMoreClick = { onOpenTrackContext(song) }
             )
 
-            Spacer(modifier = Modifier.height(4.dp))
+            Spacer(modifier = Modifier.height(16.dp))
 
             // Centerpiece stage (Artwork / Synchronized Lyrics / Interactive Queue)
             Box(
                 modifier = Modifier
-                    .weight(1f)
-                    .fillMaxWidth(),
+                    .fillMaxWidth()
+                    .then(if (activePane == NowPlayingPane.ARTWORK) Modifier else Modifier.weight(1f)),
                 contentAlignment = Alignment.TopCenter
             ) {
                 AnimatedContent(
@@ -269,7 +269,7 @@ fun NowPlayingScreen(
                 }
             }
 
-            Spacer(modifier = Modifier.height(12.dp))
+            Spacer(modifier = Modifier.height(if (activePane == NowPlayingPane.ARTWORK) 20.dp else 8.dp))
 
             // Track Metadata & Favorite Row (Fixed height container: 56.dp, single-line marquee, explicit theme white colors, no edge fade)
             Row(
@@ -366,7 +366,7 @@ fun NowPlayingScreen(
                 }
             }
 
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(4.dp))
 
             // Technical Audio Spec & Active Status Badges
             Row(
@@ -419,7 +419,7 @@ fun NowPlayingScreen(
                 }
             }
 
-            Spacer(modifier = Modifier.height(10.dp))
+            Spacer(modifier = Modifier.height(6.dp))
 
             // Progress Scrub Bar & Timestamps
             Column(modifier = Modifier.fillMaxWidth()) {
@@ -520,7 +520,7 @@ fun NowPlayingScreen(
                 }
             }
 
-            Spacer(modifier = Modifier.height(10.dp))
+            Spacer(modifier = Modifier.height(6.dp))
 
             // Primary Transport Controls: [Shuffle/Repeat] [Previous] [Play/Pause] [Next] [Sleep]
             Row(
@@ -651,7 +651,11 @@ fun NowPlayingScreen(
                 }
             }
 
-            Spacer(modifier = Modifier.height(10.dp))
+            if (activePane == NowPlayingPane.ARTWORK) {
+                Spacer(modifier = Modifier.weight(1f))
+            } else {
+                Spacer(modifier = Modifier.height(10.dp))
+            }
         }
     }
 }
@@ -780,15 +784,6 @@ private fun ArtworkShowcaseStage(
     onTapLyrics: () -> Unit
 ) {
     val atmosphere = LocalArtworkAtmosphere.current
-    val artworkScale by animateFloatAsState(
-        targetValue = if (isPlaying) 1.0f else 0.90f,
-        animationSpec = spring(
-            dampingRatio = Spring.DampingRatioMediumBouncy,
-            stiffness = Spring.StiffnessLow
-        ),
-        label = "artworkScale"
-    )
-
     var dragX by remember { mutableFloatStateOf(0f) }
     var dragY by remember { mutableFloatStateOf(0f) }
 
@@ -796,7 +791,6 @@ private fun ArtworkShowcaseStage(
         modifier = Modifier
             .fillMaxWidth()
             .aspectRatio(1f)
-            .scale(artworkScale)
             .pointerInput(song.id) {
                 detectDragGestures(
                     onDragStart = {
