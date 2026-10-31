@@ -71,6 +71,8 @@ enum class PrimaryDestination(
     SEARCH("search", "Search", Icons.Filled.Search)
 }
 
+val MiniPlayerNavGap = 4.dp
+
 @Composable
 fun PersistentMiniPlayer(
     playbackState: PlaybackUiState,
@@ -101,7 +103,7 @@ fun PersistentMiniPlayer(
                     .fillMaxWidth()
                     .padding(horizontal = 12.dp)
                     .shadow(
-                        elevation = 12.dp,
+                        elevation = 6.dp,
                         shape = shape,
                         ambientColor = animatedColor,
                         spotColor = animatedColor
@@ -253,7 +255,7 @@ fun NocturneBottomNavigationBar(
             .background(Color.Transparent)
             .navigationBarsPadding()
             .padding(horizontal = 20.dp)
-            .padding(top = 6.dp, bottom = 10.dp)
+            .padding(top = MiniPlayerNavGap, bottom = 10.dp)
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
