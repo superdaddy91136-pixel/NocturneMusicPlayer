@@ -224,17 +224,14 @@ fun SongRowItem(
             }
         }
 
-        IconButton(
+        FavoriteButton(
+            isFavorite = song.isFavorite,
             onClick = onFavoriteClick,
-            modifier = Modifier.size(36.dp)
-        ) {
-            Icon(
-                imageVector = if (song.isFavorite) Icons.Rounded.Favorite else Icons.Rounded.FavoriteBorder,
-                contentDescription = "Favorite",
-                tint = if (song.isFavorite) NocturnePalette.CrimsonRose else NocturnePalette.TextMuted,
-                modifier = Modifier.size(19.dp)
-            )
-        }
+            iconSize = 19.dp,
+            buttonSize = 36.dp,
+            unfavoriteColor = NocturnePalette.TextMuted,
+            modifier = Modifier
+        )
 
         IconButton(
             onClick = onMoreClick,

@@ -74,6 +74,8 @@ data class Album(
     val totalDurationMs: Long,
     val albumArtUri: String?,
     val isFavorite: Boolean = false,
+    val isPinned: Boolean = false,
+    val pinnedAtMs: Long? = null,
     val songs: List<Song> = emptyList()
 )
 

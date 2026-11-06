@@ -6,7 +6,7 @@ import android.util.LruCache
 import androidx.compose.ui.graphics.Color
 import androidx.core.graphics.ColorUtils
 import androidx.palette.graphics.Palette
-import coil.ImageLoader
+import coil.imageLoader
 import coil.request.ImageRequest
 import coil.size.Size
 import com.nocturne.music.model.Song
@@ -21,7 +21,7 @@ class IsolatedArtworkColorExtractor @Inject constructor(
     @ApplicationContext private val context: Context
 ) {
     private val cache = LruCache<String, Color>(64)
-    private val imageLoader by lazy { ImageLoader(context) }
+    private val imageLoader by lazy { context.imageLoader }
     private val defaultColor = Color(0xFF141720) // CharcoalSurface (dark grey)
 
     suspend fun getArtworkColor(song: Song?): Color {

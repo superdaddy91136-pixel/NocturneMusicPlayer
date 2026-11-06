@@ -116,12 +116,20 @@ fun SynchronizedLyricsView(
     }
 
     // Smooth auto-scroll to active line when not manually scrolling
-    LaunchedEffect(activeLineIndex, userManualScrollActive, lyricsDocument.songId) {
+    LaunchedEffect(activeLineIndex, userManualScrollActive, lyricsDocument.songId, listState.layoutInfo.viewportSize) {
         if (!userManualScrollActive && lyricsDocument.isSynced && activeLineIndex >= 0) {
             runCatching {
+                // Calculate an appropriate scroll offset to try and center the item vertically.
+                // We don't have the exact item height before layout, but a rough estimate or 0 often works
+                // with animateScrollToItem if we want it at the top, or negative offset to push it down.
+                // A better approach to center is to use listState.layoutInfo.viewportSize.height
+                val viewportHeight = listState.layoutInfo.viewportSize.height
+                // Assuming average line height is around 100-200px. Let's aim to place the active line
+                // around the middle of the viewport.
+                val targetOffset = -(viewportHeight / 2 - 100) // approx center
                 listState.animateScrollToItem(
                     index = activeLineIndex,
-                    scrollOffset = -220
+                    scrollOffset = targetOffset
                 )
             }
         }

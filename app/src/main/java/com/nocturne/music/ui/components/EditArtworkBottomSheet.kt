@@ -186,7 +186,14 @@ fun EditArtworkBottomSheet(
                     Switch(
                         checked = applyToAlbum,
                         onCheckedChange = { applyToAlbum = it },
-                        colors = SwitchDefaults.colors(checkedThumbColor = Color.White, checkedTrackColor = Color.White.copy(alpha = 0.3f))
+                        colors = androidx.compose.material3.SwitchDefaults.colors(
+                            checkedThumbColor = androidx.compose.ui.graphics.Color(0xFF0B1A12),
+                            checkedTrackColor = com.nocturne.music.designsystem.NocturnePalette.EmeraldGlow,
+                            checkedBorderColor = com.nocturne.music.designsystem.NocturnePalette.EmeraldGlow,
+                            uncheckedThumbColor = androidx.compose.ui.graphics.Color.White.copy(alpha = 0.60f),
+                            uncheckedTrackColor = androidx.compose.ui.graphics.Color.White.copy(alpha = 0.12f),
+                            uncheckedBorderColor = androidx.compose.ui.graphics.Color.White.copy(alpha = 0.24f)
+                        )
                     )
                 }
                 
@@ -201,7 +208,14 @@ fun EditArtworkBottomSheet(
                     Switch(
                         checked = embedInFile,
                         onCheckedChange = { embedInFile = it },
-                        colors = SwitchDefaults.colors(checkedThumbColor = Color.White, checkedTrackColor = Color.White.copy(alpha = 0.3f))
+                        colors = SwitchDefaults.colors(
+                            checkedThumbColor = androidx.compose.ui.graphics.Color(0xFF0B1A12),
+                            checkedTrackColor = com.nocturne.music.designsystem.NocturnePalette.EmeraldGlow,
+                            checkedBorderColor = com.nocturne.music.designsystem.NocturnePalette.EmeraldGlow,
+                            uncheckedThumbColor = androidx.compose.ui.graphics.Color.White.copy(alpha = 0.60f),
+                            uncheckedTrackColor = androidx.compose.ui.graphics.Color.White.copy(alpha = 0.12f),
+                            uncheckedBorderColor = androidx.compose.ui.graphics.Color.White.copy(alpha = 0.24f)
+                        )
                     )
                 }
                 

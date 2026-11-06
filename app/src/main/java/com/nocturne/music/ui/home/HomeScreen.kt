@@ -1,5 +1,11 @@
 package com.nocturne.music.ui.home
 
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -8,6 +14,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -23,7 +30,11 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Person
+import androidx.compose.material.icons.rounded.Save
 import androidx.compose.material.icons.rounded.Refresh
+import androidx.compose.material.icons.rounded.History
+import androidx.compose.material.icons.rounded.Settings
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -35,10 +46,12 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -50,6 +63,7 @@ import com.nocturne.music.designsystem.matteSurface
 import com.nocturne.music.model.Artist
 import com.nocturne.music.model.Genre
 import com.nocturne.music.model.Song
+import com.nocturne.music.model.UserSettings
 import com.nocturne.music.ui.components.ArtistArtworkCard
 import com.nocturne.music.ui.components.ArtworkImage
 import com.nocturne.music.ui.components.SectionHeader
@@ -67,6 +81,7 @@ fun HomeScreen(
     currentSong: Song?,
     isPlaying: Boolean,
     isScanning: Boolean,
+    userSettings: UserSettings,
     onPlaySongs: (List<Song>, Int, Boolean) -> Unit,
     onOpenArtist: (Long) -> Unit,
     onToggleSongFavorite: (Song) -> Unit,
@@ -74,6 +89,8 @@ fun HomeScreen(
     onRescanLibrary: () -> Unit,
     onOpenRecents: () -> Unit,
     onOpenSettings: () -> Unit,
+    onOpenProfile: () -> Unit,
+    onOpenBackup: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val atmosphere = LocalArtworkAtmosphere.current
@@ -112,42 +129,29 @@ fun HomeScreen(
             ) {
                 // Profile Avatar with Dropdown Menu
                 Box {
-                    var profileMenuExpanded by remember { mutableStateOf(false) }
-
                     Box(
                         modifier = Modifier
                             .size(42.dp)
                             .clip(CircleShape)
                             .background(atmosphere.primaryAccent.copy(alpha = 0.2f))
-                            .clickable { profileMenuExpanded = true },
+                            .clickable { onOpenProfile() },
                         contentAlignment = Alignment.Center
                     ) {
-                        Icon(
-                            imageVector = Icons.Rounded.Person,
-                            contentDescription = "Profile Menu",
-                            tint = atmosphere.primaryAccent,
-                            modifier = Modifier.size(24.dp)
-                        )
-                    }
-
-                    DropdownMenu(
-                        expanded = profileMenuExpanded,
-                        onDismissRequest = { profileMenuExpanded = false }
-                    ) {
-                        DropdownMenuItem(
-                            text = { Text("Recents") },
-                            onClick = {
-                                profileMenuExpanded = false
-                                onOpenRecents()
-                            }
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Settings") },
-                            onClick = {
-                                profileMenuExpanded = false
-                                onOpenSettings()
-                            }
-                        )
+                        if (userSettings.profilePictureUri != null) {
+                            coil.compose.AsyncImage(
+                                model = userSettings.profilePictureUri,
+                                contentDescription = "Profile Picture",
+                                contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+                                modifier = Modifier.fillMaxSize()
+                            )
+                        } else {
+                            Icon(
+                                imageVector = Icons.Rounded.Person,
+                                contentDescription = "Profile Menu",
+                                tint = atmosphere.primaryAccent,
+                                modifier = Modifier.size(24.dp)
+                            )
+                        }
                     }
                 }
 
@@ -201,8 +205,11 @@ fun HomeScreen(
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     rowSongs.forEach { song ->
+                        val isCurrent = currentSong?.id == song.id
                         QuickPickCard(
                             song = song,
+                            isCurrentSong = isCurrent,
+                            isPlaying = isPlaying,
                             onClick = {
                                 val globalIdx = recentlyPlayed.indexOf(song)
                                 onPlaySongs(recentlyPlayed, globalIdx.coerceAtLeast(0), false)
@@ -317,39 +324,128 @@ fun HomeScreen(
 }
 
 @Composable
+private fun CompactEqualizerBars(
+    isPlaying: Boolean,
+    modifier: Modifier = Modifier
+) {
+    val infiniteTransition = rememberInfiniteTransition(label = "compact_equalizer_bars")
+
+    val bar1Fraction by if (isPlaying) {
+        infiniteTransition.animateFloat(
+            initialValue = 0.25f,
+            targetValue = 0.95f,
+            animationSpec = infiniteRepeatable(
+                animation = tween(420, easing = LinearEasing),
+                repeatMode = RepeatMode.Reverse
+            ),
+            label = "bar1"
+        )
+    } else {
+        rememberUpdatedState(0.35f)
+    }
+
+    val bar2Fraction by if (isPlaying) {
+        infiniteTransition.animateFloat(
+            initialValue = 0.90f,
+            targetValue = 0.30f,
+            animationSpec = infiniteRepeatable(
+                animation = tween(360, easing = LinearEasing),
+                repeatMode = RepeatMode.Reverse
+            ),
+            label = "bar2"
+        )
+    } else {
+        rememberUpdatedState(0.65f)
+    }
+
+    val bar3Fraction by if (isPlaying) {
+        infiniteTransition.animateFloat(
+            initialValue = 0.35f,
+            targetValue = 0.85f,
+            animationSpec = infiniteRepeatable(
+                animation = tween(480, easing = LinearEasing),
+                repeatMode = RepeatMode.Reverse
+            ),
+            label = "bar3"
+        )
+    } else {
+        rememberUpdatedState(0.45f)
+    }
+
+    val gradient = Brush.verticalGradient(
+        colors = listOf(
+            NocturnePalette.LiquidCyan,
+            NocturnePalette.EmeraldGlow
+        )
+    )
+
+    Row(
+        modifier = modifier,
+        horizontalArrangement = Arrangement.spacedBy(2.dp),
+        verticalAlignment = Alignment.Bottom
+    ) {
+        listOf(bar1Fraction, bar2Fraction, bar3Fraction).forEach { fraction ->
+            Box(
+                modifier = Modifier
+                    .width(2.5.dp)
+                    .fillMaxHeight(fraction)
+                    .clip(RoundedCornerShape(1.dp))
+                    .background(gradient)
+            )
+        }
+    }
+}
+
+@Composable
 private fun QuickPickCard(
     song: Song,
+    isCurrentSong: Boolean,
+    isPlaying: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    Row(
+    Box(
         modifier = modifier
             .height(64.dp)
             .clip(RoundedCornerShape(10.dp))
             .matteSurface(RoundedCornerShape(10.dp))
-            .clickable(onClick = onClick),
-        verticalAlignment = Alignment.CenterVertically
+            .clickable(onClick = onClick)
     ) {
-        ArtworkImage(
-            artworkUri = song.albumArtUri,
-            artworkKey = "${song.id}_${song.customArtworkUpdatedAtMs}",
-            contentDescription = song.title,
-            shape = RoundedCornerShape(topStart = 10.dp, bottomStart = 10.dp),
-            seedTitle = song.album,
-            iconSize = 24.dp,
-            modifier = Modifier.size(64.dp)
-        )
-        Spacer(modifier = Modifier.width(12.dp))
-        Text(
-            text = song.title,
-            style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
-            color = NocturnePalette.TextPrimary,
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier
-                .weight(1f)
-                .padding(end = 12.dp)
-        )
+        Row(
+            modifier = Modifier.fillMaxSize(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            ArtworkImage(
+                artworkUri = song.albumArtUri,
+                artworkKey = "${song.id}_${song.customArtworkUpdatedAtMs}",
+                contentDescription = song.title,
+                shape = RoundedCornerShape(topStart = 10.dp, bottomStart = 10.dp),
+                seedTitle = song.album,
+                iconSize = 24.dp,
+                modifier = Modifier.size(64.dp)
+            )
+            Spacer(modifier = Modifier.width(12.dp))
+            Text(
+                text = song.title,
+                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
+                color = if (isCurrentSong) NocturnePalette.EmeraldGlow else NocturnePalette.TextPrimary,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(end = if (isCurrentSong) 26.dp else 12.dp)
+            )
+        }
+
+        if (isCurrentSong) {
+            CompactEqualizerBars(
+                isPlaying = isPlaying,
+                modifier = Modifier
+                    .align(Alignment.CenterEnd)
+                    .padding(end = 10.dp)
+                    .height(13.dp)
+            )
+        }
     }
 }
 

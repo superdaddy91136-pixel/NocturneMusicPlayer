@@ -2,6 +2,7 @@ package com.nocturne.music.playback
 
 import android.content.ComponentName
 import android.content.Context
+import android.media.MediaMetadataRetriever
 import android.net.Uri
 import androidx.core.content.ContextCompat
 import androidx.media3.common.MediaItem
@@ -30,6 +31,9 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.io.File
+import java.io.FileOutputStream
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -168,25 +172,55 @@ class PlaybackController @Inject constructor(
                             currentTrackReplayGainDb = song.replayGainDb
                         )
                     }
+                    if (song != null) {
+                        updateActiveItemArtworkAsync(song)
+                    }
                     persistSessionAsync()
                 }
+            }
+
+            override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
+                _playbackState.update { it.copy(isPlaying = false, isBuffering = false) }
+                stopProgressPolling()
             }
         })
     }
 
     suspend fun restorePreviousSessionIfNeeded() {
-        if (hasRestoredSession || queueManager.currentQueue.isNotEmpty()) return
-        hasRestoredSession = true
+        val controller = mediaController
+        if (hasRestoredSession && (controller == null || controller.mediaItemCount > 0)) return
 
         val saved = preferencesRepository.getPersistedPlaybackSession()
-        if (saved.queueSongIds.isEmpty()) return
+        
+        // Restore preferences unconditionally
+        val isQueueEmptyBeforeRestore = queueManager.currentQueue.isEmpty()
+        if (isQueueEmptyBeforeRestore) {
+            queueManager.setShuffle(saved.shuffleEnabled)
+            queueManager.setRepeatMode(saved.repeatMode)
+        }
+        
+        _playbackState.update {
+            it.copy(
+                shuffleEnabled = queueManager.shuffleEnabled,
+                repeatMode = queueManager.repeatMode,
+                playbackSpeed = saved.playbackSpeed,
+                playbackPitch = saved.playbackPitch
+            )
+        }
+        
+        if (controller != null) {
+            controller.repeatMode = queueManager.repeatMode.toMedia3RepeatMode()
+            controller.playbackParameters = PlaybackParameters(saved.playbackSpeed, saved.playbackPitch)
+        }
 
-        val songs = libraryRepository.getSongsByIdsOrdered(saved.queueSongIds)
-        if (songs.isEmpty()) return
+        if (queueManager.currentQueue.isEmpty()) {
+            if (saved.queueSongIds.isEmpty()) return
+            val songs = libraryRepository.getSongsByIdsOrdered(saved.queueSongIds)
+            if (songs.isEmpty()) return
 
-        val validIndex = saved.currentIndex.coerceIn(0, songs.lastIndex)
-        queueManager.setQueue(songs, validIndex, shuffle = saved.shuffleEnabled)
-        queueManager.setRepeatMode(saved.repeatMode)
+            val validIndex = saved.currentIndex.coerceIn(0, songs.lastIndex)
+            queueManager.setQueue(songs, validIndex, shuffle = saved.shuffleEnabled)
+        }
 
         val currentSong = queueManager.currentSong
         val restoredPos = if (latestSettings.rememberPlaybackPosition) saved.positionMs else 0L
@@ -197,25 +231,23 @@ class PlaybackController @Inject constructor(
                 queue = queueManager.currentQueue,
                 currentQueueIndex = queueManager.currentIndex,
                 positionMs = restoredPos,
-                durationMs = currentSong?.durationMs ?: 0L,
-                shuffleEnabled = saved.shuffleEnabled,
-                repeatMode = saved.repeatMode,
-                playbackSpeed = saved.playbackSpeed,
-                playbackPitch = saved.playbackPitch
+                durationMs = currentSong?.durationMs ?: 0L
             )
         }
 
-        val controller = mediaController ?: return
-        val mediaItems = queueManager.currentQueue.map { it.toMediaItem() }
-        controller.setMediaItems(mediaItems, queueManager.currentIndex, restoredPos)
-        controller.repeatMode = saved.repeatMode.toMedia3RepeatMode()
-        controller.playbackParameters = PlaybackParameters(saved.playbackSpeed, saved.playbackPitch)
-        controller.prepare()
+        if (controller != null) {
+            hasRestoredSession = true
+            val mediaItems = queueManager.currentQueue.map { it.toMediaItem() }
+            controller.setMediaItems(mediaItems, queueManager.currentIndex, restoredPos)
+            controller.prepare()
+            queueManager.currentSong?.let { updateActiveItemArtworkAsync(it) }
+        }
     }
 
     fun playSongs(songs: List<Song>, startIndex: Int = 0, shuffle: Boolean = false) {
         if (songs.isEmpty()) return
-        queueManager.setQueue(songs, startIndex, shuffle = shuffle)
+        val effectiveShuffle = if (shuffle) true else queueManager.shuffleEnabled
+        queueManager.setQueue(songs, startIndex, shuffle = effectiveShuffle)
         val activeSongs = queueManager.currentQueue
         val activeIndex = queueManager.currentIndex
         val current = queueManager.currentSong ?: return
@@ -247,6 +279,7 @@ class PlaybackController @Inject constructor(
         controller.play()
         startProgressPolling()
         persistSessionAsync()
+        updateActiveItemArtworkAsync(current)
     }
 
     fun togglePlayPause() {
@@ -258,7 +291,12 @@ class PlaybackController @Inject constructor(
         if (controller.isPlaying) {
             controller.pause()
         } else {
-            if (controller.playbackState == Player.STATE_IDLE) {
+            if (controller.mediaItemCount == 0 && queueManager.currentQueue.isNotEmpty()) {
+                val mediaItems = queueManager.currentQueue.map { it.toMediaItem() }
+                val restoredPos = _playbackState.value.positionMs
+                controller.setMediaItems(mediaItems, queueManager.currentIndex, restoredPos)
+                controller.prepare()
+            } else if (controller.playbackState == Player.STATE_IDLE) {
                 controller.prepare()
             }
             controller.volume = 1.0f
@@ -614,6 +652,69 @@ class PlaybackController @Inject constructor(
         }
     }
 
+    private fun updateActiveItemArtworkAsync(song: Song) {
+        scope.launch(Dispatchers.IO) {
+            val artUri = getOrCreateNotificationArtworkUri(song)
+            withContext(Dispatchers.Main) {
+                val controller = mediaController ?: return@withContext
+                val currentIndex = controller.currentMediaItemIndex
+                if (currentIndex in 0 until controller.mediaItemCount) {
+                    val currentItem = controller.getMediaItemAt(currentIndex)
+                    if (currentItem.mediaId == song.id.toString()) {
+                        val currentMeta = currentItem.mediaMetadata
+                        
+                        // Break infinite onMediaItemTransition loop
+                        if (currentMeta.artworkUri == artUri) return@withContext
+                        
+                        val newMeta = currentMeta.buildUpon()
+                            .setArtworkUri(artUri)
+                            .build()
+                        val updatedItem = currentItem.buildUpon()
+                            .setMediaMetadata(newMeta)
+                            .build()
+                        controller.replaceMediaItem(currentIndex, updatedItem)
+                    }
+                }
+            }
+        }
+    }
+
+    private fun getOrCreateNotificationArtworkUri(song: Song): Uri? {
+        try {
+            if (!song.albumArtUri.isNullOrBlank()) {
+                if (song.albumArtUri.startsWith("file://") || song.albumArtUri.startsWith("/")) {
+                    val file = File(song.albumArtUri.removePrefix("file://"))
+                    if (file.exists()) return Uri.fromFile(file)
+                }
+            }
+
+            val artCacheDir = File(context.cacheDir, "notif_artwork").apply { if (!exists()) mkdirs() }
+            val artFile = File(artCacheDir, "art_${song.id}.jpg")
+            if (artFile.exists() && artFile.length() > 0) {
+                return Uri.fromFile(artFile)
+            }
+
+            val retriever = MediaMetadataRetriever()
+            try {
+                retriever.setDataSource(context, Uri.parse(song.contentUri))
+                val picture = retriever.embeddedPicture
+                if (picture != null && picture.isNotEmpty()) {
+                    FileOutputStream(artFile).use { fos ->
+                        fos.write(picture)
+                    }
+                    if (artFile.exists() && artFile.length() > 0) {
+                        return Uri.fromFile(artFile)
+                    }
+                }
+            } catch (_: Throwable) {
+            } finally {
+                runCatching { retriever.release() }
+            }
+        } catch (_: Throwable) {
+        }
+        return null
+    }
+
     private fun Song.toMediaItem(): MediaItem {
         val metadataBuilder = MediaMetadata.Builder()
             .setTitle(title)
@@ -623,10 +724,6 @@ class PlaybackController @Inject constructor(
             .setTrackNumber(trackNumber)
             .setDiscNumber(discNumber)
             .setReleaseYear(year.takeIf { it > 0 })
-
-        if (!albumArtUri.isNullOrBlank()) {
-            metadataBuilder.setArtworkUri(Uri.parse(albumArtUri))
-        }
 
         return MediaItem.Builder()
             .setMediaId(id.toString())

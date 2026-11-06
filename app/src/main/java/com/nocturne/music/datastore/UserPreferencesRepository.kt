@@ -50,8 +50,11 @@ class UserPreferencesRepository @Inject constructor(
     private val dataStore = context.nocturneDataStore
 
     private object Keys {
+        val HAS_COMPLETED_INITIAL_SCAN = booleanPreferencesKey("has_completed_initial_scan")
         val GAPLESS_PLAYBACK = booleanPreferencesKey("gapless_playback")
         val CROSSFADE_SEC = intPreferencesKey("crossfade_sec")
+        val IS_LIBRARY_GRID_VIEW = booleanPreferencesKey("is_library_grid_view")
+        val IS_LIBRARY_LANDING_GRID_VIEW = booleanPreferencesKey("is_library_landing_grid_view")
         val VOLUME_NORMALIZATION = booleanPreferencesKey("volume_normalization")
         val NORMALIZATION_PREAMP_DB = floatPreferencesKey("normalization_preamp_db")
         val RESUME_ON_BLUETOOTH = booleanPreferencesKey("resume_on_bluetooth")
@@ -94,6 +97,10 @@ class UserPreferencesRepository @Inject constructor(
         val SAVED_REPEAT_MODE = stringPreferencesKey("saved_repeat_mode")
         val SAVED_SPEED = floatPreferencesKey("saved_speed")
         val SAVED_PITCH = floatPreferencesKey("saved_pitch")
+        
+        val USER_PROFILE_NAME = stringPreferencesKey("user_profile_name")
+        val USER_PROFILE_PICTURE_URI = stringPreferencesKey("user_profile_picture_uri")
+        val SELECTED_APP_ICON = stringPreferencesKey("selected_app_icon")
     }
 
     val userSettingsFlow: Flow<UserSettings> = dataStore.data
@@ -104,6 +111,8 @@ class UserPreferencesRepository @Inject constructor(
             UserSettings(
                 gaplessPlayback = prefs[Keys.GAPLESS_PLAYBACK] ?: true,
                 crossfadeDurationSec = prefs[Keys.CROSSFADE_SEC] ?: 0,
+                isLibraryGridView = prefs[Keys.IS_LIBRARY_GRID_VIEW] ?: true,
+                isLibraryLandingGridView = prefs[Keys.IS_LIBRARY_LANDING_GRID_VIEW] ?: true,
                 volumeNormalization = prefs[Keys.VOLUME_NORMALIZATION] ?: false,
                 normalizationPreampDb = prefs[Keys.NORMALIZATION_PREAMP_DB] ?: 0f,
                 resumeOnBluetoothConnect = prefs[Keys.RESUME_ON_BLUETOOTH] ?: false,
@@ -138,7 +147,11 @@ class UserPreferencesRepository @Inject constructor(
                 }.getOrDefault(AlbumSortOption.TITLE),
                 artistSortOption = runCatching {
                     ArtistSortOption.valueOf(prefs[Keys.ARTIST_SORT_OPTION] ?: ArtistSortOption.NAME.name)
-                }.getOrDefault(ArtistSortOption.NAME)
+                }.getOrDefault(ArtistSortOption.NAME),
+                profileName = prefs[Keys.USER_PROFILE_NAME] ?: "Nocturne User",
+                profilePictureUri = prefs[Keys.USER_PROFILE_PICTURE_URI],
+                selectedAppIconId = prefs[Keys.SELECTED_APP_ICON] ?: com.nocturne.music.model.AppIconOption.DEFAULT.id,
+                hasCompletedInitialScan = prefs[Keys.HAS_COMPLETED_INITIAL_SCAN] ?: false
             )
         }
 
@@ -213,6 +226,14 @@ class UserPreferencesRepository @Inject constructor(
 
     suspend fun setCrossfadeDurationSec(seconds: Int) {
         dataStore.edit { it[Keys.CROSSFADE_SEC] = seconds.coerceIn(0, 12) }
+    }
+
+    suspend fun setIsLibraryGridView(isGrid: Boolean) {
+        dataStore.edit { it[Keys.IS_LIBRARY_GRID_VIEW] = isGrid }
+    }
+
+    suspend fun setIsLibraryLandingGridView(isGrid: Boolean) {
+        dataStore.edit { it[Keys.IS_LIBRARY_LANDING_GRID_VIEW] = isGrid }
     }
 
     suspend fun setVolumeNormalization(enabled: Boolean) {
@@ -292,6 +313,29 @@ class UserPreferencesRepository @Inject constructor(
 
     suspend fun setArtistSort(option: ArtistSortOption) {
         dataStore.edit { it[Keys.ARTIST_SORT_OPTION] = option.name }
+    }
+
+    suspend fun setProfileInfo(name: String, pictureUri: String?) {
+        dataStore.edit { prefs ->
+            prefs[Keys.USER_PROFILE_NAME] = name
+            if (pictureUri != null) {
+                prefs[Keys.USER_PROFILE_PICTURE_URI] = pictureUri
+            } else {
+                prefs.remove(Keys.USER_PROFILE_PICTURE_URI)
+            }
+        }
+    }
+
+    suspend fun setSelectedAppIcon(iconId: String) {
+        dataStore.edit { prefs ->
+            prefs[Keys.SELECTED_APP_ICON] = iconId
+        }
+    }
+
+    suspend fun setHasCompletedInitialScan(completed: Boolean) {
+        dataStore.edit { prefs ->
+            prefs[Keys.HAS_COMPLETED_INITIAL_SCAN] = completed
+        }
     }
 
     suspend fun updateEqualizer(

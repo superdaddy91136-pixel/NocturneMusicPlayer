@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -17,6 +18,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
@@ -29,19 +31,26 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.automirrored.rounded.Sort
 import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.Album
 import androidx.compose.material.icons.rounded.ArrowDownward
 import androidx.compose.material.icons.rounded.ArrowUpward
 import androidx.compose.material.icons.rounded.DeleteOutline
 import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.Favorite
-import androidx.compose.material.icons.rounded.FavoriteBorder
 import androidx.compose.material.icons.rounded.Folder
 import androidx.compose.material.icons.rounded.FolderOff
+import androidx.compose.material.icons.rounded.GridView
+import androidx.compose.material.icons.rounded.LibraryMusic
+import androidx.compose.material.icons.rounded.MoreVert
 import androidx.compose.material.icons.rounded.MusicNote
+import androidx.compose.material.icons.rounded.Person
 import androidx.compose.material.icons.rounded.PlayArrow
+import androidx.compose.material.icons.rounded.PushPin
+import androidx.compose.material.icons.rounded.QueueMusic
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material.icons.rounded.Shuffle
+import androidx.compose.material.icons.rounded.ViewList
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
@@ -49,6 +58,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -56,12 +66,14 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.nocturne.music.designsystem.LocalArtworkAtmosphere
 import com.nocturne.music.designsystem.NocturnePalette
-import com.nocturne.music.designsystem.liquidGlassPanel
 import com.nocturne.music.designsystem.matteSurface
 import com.nocturne.music.model.Album
 import com.nocturne.music.model.AlbumSortOption
@@ -78,19 +90,22 @@ import com.nocturne.music.model.UserSettings
 import com.nocturne.music.ui.components.AlbumArtworkCard
 import com.nocturne.music.ui.components.ArtistArtworkCard
 import com.nocturne.music.ui.components.ArtworkImage
+import com.nocturne.music.ui.components.FavoriteButton
 import com.nocturne.music.ui.components.PlaylistCard
 import com.nocturne.music.ui.components.SectionHeader
 import com.nocturne.music.ui.components.SongRowItem
 
-enum class LibraryTab(val label: String) {
-    SONGS("Songs"),
-    ALBUMS("Albums"),
-    ARTISTS("Artists"),
-    PLAYLISTS("Playlists"),
-    GENRES("Genres"),
-    FAVOURITES("Favourites"),
-    RECENT("Recent"),
-    FOLDERS("Folders")
+sealed interface LibraryView {
+    data object Main : LibraryView
+    data object LikedSongs : LibraryView
+    data object AllSongs : LibraryView
+    data object AllAlbums : LibraryView
+    data object AllArtists : LibraryView
+    data object AllPlaylists : LibraryView
+    data object SavedPlaylists : LibraryView
+    data object Genres : LibraryView
+    data object Recent : LibraryView
+    data object Folders : LibraryView
 }
 
 sealed interface LibraryDrillDown {
@@ -100,6 +115,16 @@ sealed interface LibraryDrillDown {
     data class GenreDetail(val genreName: String) : LibraryDrillDown
     data class FolderDetail(val folderPath: String) : LibraryDrillDown
 }
+
+private data class LibraryCategory(
+    val title: String,
+    val icon: ImageVector,
+    val countText: String,
+    val count: Int,
+    val gradientColors: List<Color>,
+    val accentColor: Color,
+    val onClick: () -> Unit
+)
 
 @Composable
 fun LibraryScreen(
@@ -112,6 +137,7 @@ fun LibraryScreen(
     favoriteSongs: List<Song>,
     favoriteAlbums: List<Album>,
     favoriteArtists: List<Artist>,
+    pinnedAlbums: List<Album>,
     recentlyPlayed: List<Song>,
     recentlyAdded: List<Song>,
     currentSong: Song?,
@@ -122,7 +148,10 @@ fun LibraryScreen(
     onPlaySongs: (List<Song>, Int, Boolean) -> Unit,
     onToggleSongFavorite: (Song) -> Unit,
     onToggleAlbumFavorite: (Album) -> Unit,
+    onToggleAlbumPinned: (Album) -> Unit,
     onToggleArtistFavorite: (Artist) -> Unit,
+    onToggleGridList: (Boolean) -> Unit,
+    onToggleLandingGridList: (Boolean) -> Unit,
     onOpenTrackContext: (Song) -> Unit,
     onCreatePlaylistClick: () -> Unit,
     onRenamePlaylistClick: (Playlist) -> Unit,
@@ -135,19 +164,53 @@ fun LibraryScreen(
     onIncludeFolder: (String) -> Unit,
     onRescanLibrary: () -> Unit,
     onOpenSettings: () -> Unit,
+    onDrillDownActiveChanged: (Boolean) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val atmosphere = LocalArtworkAtmosphere.current
-    var selectedTab by remember { mutableStateOf(LibraryTab.SONGS) }
-    var internalDrillDown by remember { mutableStateOf<LibraryDrillDown?>(null) }
+    var currentView by remember { mutableStateOf<LibraryView>(LibraryView.Main) }
+    val isGridView = userSettings.isLibraryGridView
+    val isLandingGridView = userSettings.isLibraryLandingGridView
+    var drillDownStack by remember { mutableStateOf<List<LibraryDrillDown>>(emptyList()) }
     var showSortMenu by remember { mutableStateOf(false) }
 
-    val activeDrillDown = externalDrillDown ?: internalDrillDown
-
-    val closeDrillDown = {
-        internalDrillDown = null
-        onClearExternalDrillDown()
+    LaunchedEffect(externalDrillDown) {
+        if (externalDrillDown != null) {
+            if (drillDownStack.lastOrNull() != externalDrillDown) {
+                drillDownStack = listOf(externalDrillDown)
+            }
+        } else if (drillDownStack.isNotEmpty() && drillDownStack.all { it == externalDrillDown }) {
+            drillDownStack = emptyList()
+        }
     }
+
+    val handleBack = {
+        if (drillDownStack.isNotEmpty()) {
+            val updated = drillDownStack.dropLast(1)
+            drillDownStack = updated
+            if (updated.isEmpty() && externalDrillDown != null) {
+                onClearExternalDrillDown()
+            }
+        } else if (externalDrillDown != null) {
+            onClearExternalDrillDown()
+        } else if (currentView != LibraryView.Main) {
+            currentView = LibraryView.Main
+        }
+    }
+
+    androidx.activity.compose.BackHandler(
+        enabled = drillDownStack.isNotEmpty() || externalDrillDown != null || currentView != LibraryView.Main
+    ) {
+        handleBack()
+    }
+
+    val activeDrillDown = drillDownStack.lastOrNull() ?: externalDrillDown
+
+    LaunchedEffect(activeDrillDown != null) {
+        onDrillDownActiveChanged(activeDrillDown != null)
+    }
+
+    val closeDrillDown = handleBack
 
     if (activeDrillDown != null) {
         when (activeDrillDown) {
@@ -162,6 +225,7 @@ fun LibraryScreen(
                         onPlayAlbum = { shuffle -> onPlaySongs(album.songs, 0, shuffle) },
                         onPlaySongAt = { idx -> onPlaySongs(album.songs, idx, false) },
                         onToggleAlbumFavorite = { onToggleAlbumFavorite(album) },
+                        onToggleAlbumPinned = { onToggleAlbumPinned(album) },
                         onToggleSongFavorite = onToggleSongFavorite,
                         onOpenTrackContext = onOpenTrackContext
                     )
@@ -178,7 +242,7 @@ fun LibraryScreen(
                         isPlaying = isPlaying,
                         onBack = closeDrillDown,
                         onPlayArtist = { shuffle -> onPlaySongs(artist.songs, 0, shuffle) },
-                        onOpenAlbum = { albumId -> internalDrillDown = LibraryDrillDown.AlbumDetail(albumId) },
+                        onOpenAlbum = { albumId -> drillDownStack = drillDownStack + LibraryDrillDown.AlbumDetail(albumId) },
                         onPlaySongAt = { idx -> onPlaySongs(artist.songs, idx, false) },
                         onToggleArtistFavorite = { onToggleArtistFavorite(artist) },
                         onToggleSongFavorite = onToggleSongFavorite,
@@ -266,108 +330,336 @@ fun LibraryScreen(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Column {
-                Text(
-                    text = "Library",
-                    style = MaterialTheme.typography.displayMedium,
-                    color = NocturnePalette.TextPrimary
-                )
-                Text(
-                    text = "${songs.size} songs • ${albums.size} albums • ${artists.size} artists",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = NocturnePalette.TextMuted
-                )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                if (currentView != LibraryView.Main) {
+                    IconButton(
+                        onClick = handleBack,
+                        modifier = Modifier.padding(end = 8.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Rounded.ArrowBack,
+                            contentDescription = "Back",
+                            tint = NocturnePalette.TextPrimary
+                        )
+                    }
+                }
+                Column {
+                    Text(
+                        text = when (currentView) {
+                            LibraryView.Main -> "Library"
+                            LibraryView.LikedSongs -> "Liked Songs"
+                            LibraryView.AllSongs -> "All Songs"
+                            LibraryView.AllAlbums -> "All Albums"
+                            LibraryView.AllArtists -> "All Artists"
+                            LibraryView.AllPlaylists -> "All Playlists"
+                            LibraryView.SavedPlaylists -> "Saved Playlists"
+                            LibraryView.Genres -> "Genres"
+                            LibraryView.Recent -> "Recent"
+                            LibraryView.Folders -> "Folders"
+                        },
+                        style = MaterialTheme.typography.displayMedium,
+                        color = NocturnePalette.TextPrimary
+                    )
+                    if (currentView == LibraryView.Main) {
+                        Text(
+                            text = "${songs.size} songs • ${albums.size} albums",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = NocturnePalette.TextMuted
+                        )
+                    }
+                }
             }
 
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Box {
+                if (currentView == LibraryView.AllAlbums || currentView == LibraryView.AllArtists) {
                     IconButton(
-                        onClick = { showSortMenu = true },
+                        onClick = { onToggleGridList(!isGridView) },
                         modifier = Modifier
                             .size(40.dp)
                             .matteSurface(CircleShape)
                     ) {
                         Icon(
-                            imageVector = Icons.AutoMirrored.Rounded.Sort,
-                            contentDescription = "Sort Library",
+                            imageVector = if (isGridView) Icons.Rounded.ViewList else Icons.Rounded.GridView,
+                            contentDescription = "Toggle View",
                             tint = NocturnePalette.TextPrimary,
                             modifier = Modifier.size(20.dp)
                         )
                     }
-                    LibrarySortDropdown(
-                        expanded = showSortMenu,
-                        selectedTab = selectedTab,
-                        userSettings = userSettings,
-                        onDismiss = { showSortMenu = false },
-                        onSetSongSort = onSetSongSort,
-                        onSetAlbumSort = onSetAlbumSort,
-                        onSetArtistSort = onSetArtistSort
-                    )
                 }
 
-                IconButton(
-                    onClick = onRescanLibrary,
-                    modifier = Modifier
-                        .size(40.dp)
-                        .matteSurface(CircleShape)
-                ) {
-                    Icon(
-                        imageVector = Icons.Rounded.Refresh,
-                        contentDescription = "Rescan",
-                        tint = NocturnePalette.TextSecondary,
-                        modifier = Modifier.size(20.dp)
-                    )
-                }
-
-                IconButton(
-                    onClick = onOpenSettings,
-                    modifier = Modifier
-                        .size(40.dp)
-                        .matteSurface(CircleShape)
-                ) {
-                    Icon(
-                        imageVector = Icons.Rounded.Settings,
-                        contentDescription = "Settings",
-                        tint = NocturnePalette.TextPrimary,
-                        modifier = Modifier.size(20.dp)
-                    )
-                }
-            }
-        }
-
-        // Scrollable Liquid-Glass Category Tabs
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .horizontalScroll(rememberScrollState())
-                .padding(horizontal = 20.dp, vertical = 6.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            LibraryTab.entries.forEach { tab ->
-                val selected = tab == selectedTab
-                Box(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(50))
-                        .background(
-                            if (selected) atmosphere.primaryAccent else NocturnePalette.CharcoalSurface
+                if (currentView != LibraryView.Main) {
+                    Box {
+                        IconButton(
+                            onClick = { showSortMenu = true },
+                            modifier = Modifier
+                                .size(40.dp)
+                                .matteSurface(CircleShape)
+                        ) {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Rounded.Sort,
+                                contentDescription = "Sort",
+                                tint = NocturnePalette.TextPrimary,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                        LibrarySortDropdown(
+                            expanded = showSortMenu,
+                            currentView = currentView,
+                            userSettings = userSettings,
+                            onDismiss = { showSortMenu = false },
+                            onSetSongSort = onSetSongSort,
+                            onSetAlbumSort = onSetAlbumSort,
+                            onSetArtistSort = onSetArtistSort
                         )
-                        .clickable { selectedTab = tab }
-                        .padding(horizontal = 16.dp, vertical = 8.dp)
-                ) {
-                    Text(
-                        text = tab.label,
-                        style = MaterialTheme.typography.labelLarge,
-                        color = if (selected) NocturnePalette.AmoledBlack else NocturnePalette.TextSecondary
-                    )
+                    }
+                } else {
+                    IconButton(
+                        onClick = { onToggleLandingGridList(!isLandingGridView) },
+                        modifier = Modifier
+                            .size(40.dp)
+                            .matteSurface(CircleShape)
+                    ) {
+                        Icon(
+                            imageVector = if (isLandingGridView) Icons.Rounded.ViewList else Icons.Rounded.GridView,
+                            contentDescription = "Toggle Landing View",
+                            tint = NocturnePalette.TextPrimary,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+
+                    IconButton(
+                        onClick = onRescanLibrary,
+                        modifier = Modifier
+                            .size(40.dp)
+                            .matteSurface(CircleShape)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Rounded.Refresh,
+                            contentDescription = "Rescan",
+                            tint = NocturnePalette.TextSecondary,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+
+                    IconButton(
+                        onClick = onOpenSettings,
+                        modifier = Modifier
+                            .size(40.dp)
+                            .matteSurface(CircleShape)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Rounded.Settings,
+                            contentDescription = "Settings",
+                            tint = NocturnePalette.TextPrimary,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
                 }
             }
         }
 
         Spacer(modifier = Modifier.height(6.dp))
 
-        // Tab Content
-        when (selectedTab) {
-            LibraryTab.SONGS -> {
+        // Content
+        when (currentView) {
+            LibraryView.Main -> {
+                val categories = listOf(
+                    LibraryCategory(
+                        title = "Liked Songs",
+                        icon = Icons.Rounded.Favorite,
+                        countText = "${favoriteSongs.size} tracks",
+                        count = favoriteSongs.size,
+                        gradientColors = listOf(Color(0xFFD65C7D), Color(0xFFD9B8BC)),
+                        accentColor = Color(0xFFD65C7D),
+                        onClick = { currentView = LibraryView.LikedSongs }
+                    ),
+                    LibraryCategory(
+                        title = "All Songs",
+                        icon = Icons.Rounded.MusicNote,
+                        countText = "${songs.size} tracks",
+                        count = songs.size,
+                        gradientColors = listOf(Color(0xFF286A9B), Color(0xFF72A9C5)),
+                        accentColor = Color(0xFF286A9B),
+                        onClick = { currentView = LibraryView.AllSongs }
+                    ),
+                    LibraryCategory(
+                        title = "All Albums",
+                        icon = Icons.Rounded.Album,
+                        countText = "${albums.size} albums",
+                        count = albums.size,
+                        gradientColors = listOf(Color(0xFF176B55), Color(0xFF79B99A)),
+                        accentColor = Color(0xFF176B55),
+                        onClick = { currentView = LibraryView.AllAlbums }
+                    ),
+                    LibraryCategory(
+                        title = "All Artists",
+                        icon = Icons.Rounded.Person,
+                        countText = "${artists.size} artists",
+                        count = artists.size,
+                        gradientColors = listOf(Color(0xFFB87932), Color(0xFFE2B66D)),
+                        accentColor = Color(0xFFB87932),
+                        onClick = { currentView = LibraryView.AllArtists }
+                    ),
+                    LibraryCategory(
+                        title = "All Playlists",
+                        icon = Icons.Rounded.LibraryMusic,
+                        countText = "${playlists.size} playlists",
+                        count = playlists.size,
+                        gradientColors = listOf(Color(0xFF6947A8), Color(0xFFB18BD5)),
+                        accentColor = Color(0xFF6947A8),
+                        onClick = { currentView = LibraryView.AllPlaylists }
+                    ),
+                    LibraryCategory(
+                        title = "Saved Playlists",
+                        icon = Icons.Rounded.QueueMusic,
+                        countText = "${playlists.size} saved",
+                        count = playlists.size,
+                        gradientColors = listOf(Color(0xFF167E82), Color(0xFF70C7BD)),
+                        accentColor = Color(0xFF167E82),
+                        onClick = { currentView = LibraryView.SavedPlaylists }
+                    )
+                )
+
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(bottom = 150.dp)
+                ) {
+                    if (pinnedAlbums.isNotEmpty()) {
+                        item {
+                            SectionHeader(title = "Pinned Albums")
+                            LazyRow(
+                                modifier = Modifier.fillMaxWidth(),
+                                contentPadding = PaddingValues(horizontal = 20.dp),
+                                horizontalArrangement = Arrangement.spacedBy(14.dp)
+                            ) {
+                                items(pinnedAlbums, key = { "pinned_${it.id}" }) { album ->
+                                    Box {
+                                        AlbumArtworkCard(
+                                            album = album,
+                                            onClick = { drillDownStack = drillDownStack + LibraryDrillDown.AlbumDetail(album.id) },
+                                            modifier = Modifier.width(140.dp)
+                                        )
+                                        IconButton(
+                                            onClick = { onToggleAlbumPinned(album) },
+                                            modifier = Modifier
+                                                .align(Alignment.TopEnd)
+                                                .padding(6.dp)
+                                                .size(28.dp)
+                                                .background(
+                                                    NocturnePalette.CharcoalSurface.copy(alpha = 0.8f),
+                                                    CircleShape
+                                                )
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Rounded.PushPin,
+                                                contentDescription = "Unpin",
+                                                tint = NocturnePalette.EmeraldGlow,
+                                                modifier = Modifier.size(16.dp)
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                            Spacer(modifier = Modifier.height(24.dp))
+                        }
+                    }
+
+                    if (isLandingGridView) {
+                        item {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 20.dp),
+                                verticalArrangement = Arrangement.spacedBy(14.dp)
+                            ) {
+                                categories.chunked(2).forEach { rowCategories ->
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.spacedBy(14.dp)
+                                    ) {
+                                        rowCategories.forEach { category ->
+                                            Box(modifier = Modifier.weight(1f)) {
+                                                LibraryCategoryCard(category = category)
+                                            }
+                                        }
+                                        if (rowCategories.size == 1) {
+                                            Spacer(modifier = Modifier.weight(1f))
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    } else {
+                        items(categories, key = { "cat_${it.title}" }) { category ->
+                            LibraryCategoryRow(
+                                title = category.title,
+                                icon = category.icon,
+                                itemCount = category.countText,
+                                accentColor = category.accentColor,
+                                onClick = category.onClick
+                            )
+                        }
+                    }
+
+                    item {
+                        Spacer(modifier = Modifier.height(16.dp))
+                        SectionHeader(title = "More")
+
+                        LibraryCategoryRow(
+                            title = "Genres",
+                            icon = Icons.Rounded.LibraryMusic,
+                            itemCount = "${genres.size} genres",
+                            accentColor = NocturnePalette.EmeraldGlow,
+                            onClick = { currentView = LibraryView.Genres }
+                        )
+                        LibraryCategoryRow(
+                            title = "Recent",
+                            icon = Icons.Rounded.Refresh,
+                            itemCount = "${recentlyPlayed.size} played",
+                            accentColor = NocturnePalette.EmeraldGlow,
+                            onClick = { currentView = LibraryView.Recent }
+                        )
+                        LibraryCategoryRow(
+                            title = "Folders",
+                            icon = Icons.Rounded.Folder,
+                            itemCount = "${folders.size} folders",
+                            accentColor = NocturnePalette.EmeraldGlow,
+                            onClick = { currentView = LibraryView.Folders }
+                        )
+                    }
+                }
+            }
+
+            LibraryView.LikedSongs -> {
+                LazyColumn(
+                    contentPadding = PaddingValues(bottom = 150.dp),
+                    modifier = Modifier.fillMaxSize()
+                ) {
+                    item {
+                        ActionChipButton(
+                            label = "Play All (${favoriteSongs.size})",
+                            icon = Icons.Rounded.PlayArrow,
+                            primary = true,
+                            onClick = { if (favoriteSongs.isNotEmpty()) onPlaySongs(favoriteSongs, 0, false) },
+                            modifier = Modifier
+                                .padding(horizontal = 20.dp, vertical = 8.dp)
+                                .fillMaxWidth()
+                        )
+                    }
+                    itemsIndexed(favoriteSongs, key = { _, s -> "fav_s_${s.id}" }) { idx, song ->
+                        SongRowItem(
+                            song = song,
+                            isCurrentSong = currentSong?.id == song.id,
+                            isPlaying = isPlaying,
+                            onClick = { onPlaySongs(favoriteSongs, idx, false) },
+                            onFavoriteClick = { onToggleSongFavorite(song) },
+                            onMoreClick = { onOpenTrackContext(song) }
+                        )
+                    }
+                }
+            }
+
+            LibraryView.AllSongs -> {
                 LazyColumn(
                     contentPadding = PaddingValues(bottom = 150.dp),
                     modifier = Modifier.fillMaxSize()
@@ -409,41 +701,115 @@ fun LibraryScreen(
                 }
             }
 
-            LibraryTab.ALBUMS -> {
-                LazyVerticalGrid(
-                    columns = GridCells.Adaptive(minSize = 156.dp),
-                    contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 8.dp, bottom = 150.dp),
-                    horizontalArrangement = Arrangement.spacedBy(14.dp),
-                    verticalArrangement = Arrangement.spacedBy(14.dp),
-                    modifier = Modifier.fillMaxSize()
-                ) {
-                    items(albums, key = { "lib_album_${it.id}" }) { album ->
-                        AlbumArtworkCard(
-                            album = album,
-                            onClick = { internalDrillDown = LibraryDrillDown.AlbumDetail(album.id) }
-                        )
+            LibraryView.AllAlbums -> {
+                if (isGridView) {
+                    LazyVerticalGrid(
+                        columns = GridCells.Adaptive(minSize = 156.dp),
+                        contentPadding = PaddingValues(
+                            start = 20.dp,
+                            end = 20.dp,
+                            top = 8.dp,
+                            bottom = 150.dp
+                        ),
+                        horizontalArrangement = Arrangement.spacedBy(14.dp),
+                        verticalArrangement = Arrangement.spacedBy(14.dp),
+                        modifier = Modifier.fillMaxSize()
+                    ) {
+                        items(albums, key = { "lib_album_${it.id}" }) { album ->
+                            AlbumArtworkCard(
+                                album = album,
+                                onClick = { drillDownStack = drillDownStack + LibraryDrillDown.AlbumDetail(album.id) }
+                            )
+                        }
+                    }
+                } else {
+                    LazyColumn(
+                        contentPadding = PaddingValues(bottom = 150.dp),
+                        modifier = Modifier.fillMaxSize()
+                    ) {
+                        items(albums, key = { "lib_album_${it.id}" }) { album ->
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 20.dp, vertical = 4.dp)
+                                    .matteSurface(RoundedCornerShape(14.dp))
+                                    .clickable { drillDownStack = drillDownStack + LibraryDrillDown.AlbumDetail(album.id) }
+                                    .padding(12.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                ArtworkImage(
+                                    artworkUri = album.albumArtUri,
+                                    contentDescription = album.title,
+                                    shape = RoundedCornerShape(10.dp),
+                                    seedTitle = album.title,
+                                    modifier = Modifier.size(48.dp)
+                                )
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(album.title, style = MaterialTheme.typography.titleMedium, color = NocturnePalette.TextPrimary)
+                                    Text(album.artist, style = MaterialTheme.typography.bodySmall, color = NocturnePalette.TextSecondary)
+                                }
+                            }
+                        }
                     }
                 }
             }
 
-            LibraryTab.ARTISTS -> {
-                LazyVerticalGrid(
-                    columns = GridCells.Adaptive(minSize = 116.dp),
-                    contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 150.dp),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
-                    verticalArrangement = Arrangement.spacedBy(14.dp),
-                    modifier = Modifier.fillMaxSize()
-                ) {
-                    items(artists, key = { "lib_artist_${it.id}" }) { artist ->
-                        ArtistArtworkCard(
-                            artist = artist,
-                            onClick = { internalDrillDown = LibraryDrillDown.ArtistDetail(artist.id) }
-                        )
+            LibraryView.AllArtists -> {
+                if (isGridView) {
+                    LazyVerticalGrid(
+                        columns = GridCells.Adaptive(minSize = 116.dp),
+                        contentPadding = PaddingValues(
+                            start = 16.dp,
+                            end = 16.dp,
+                            top = 8.dp,
+                            bottom = 150.dp
+                        ),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        verticalArrangement = Arrangement.spacedBy(14.dp),
+                        modifier = Modifier.fillMaxSize()
+                    ) {
+                        items(artists, key = { "lib_artist_${it.id}" }) { artist ->
+                            ArtistArtworkCard(
+                                artist = artist,
+                                onClick = { drillDownStack = drillDownStack + LibraryDrillDown.ArtistDetail(artist.id) }
+                            )
+                        }
+                    }
+                } else {
+                    LazyColumn(
+                        contentPadding = PaddingValues(bottom = 150.dp),
+                        modifier = Modifier.fillMaxSize()
+                    ) {
+                        items(artists, key = { "lib_artist_${it.id}" }) { artist ->
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 20.dp, vertical = 4.dp)
+                                    .matteSurface(RoundedCornerShape(14.dp))
+                                    .clickable { drillDownStack = drillDownStack + LibraryDrillDown.ArtistDetail(artist.id) }
+                                    .padding(12.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                ArtworkImage(
+                                    artworkUri = artist.artworkUri,
+                                    contentDescription = artist.name,
+                                    shape = CircleShape,
+                                    seedTitle = artist.name,
+                                    modifier = Modifier.size(48.dp)
+                                )
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(artist.name, style = MaterialTheme.typography.titleMedium, color = NocturnePalette.TextPrimary)
+                                    Text("${artist.songCount} tracks", style = MaterialTheme.typography.bodySmall, color = NocturnePalette.TextSecondary)
+                                }
+                            }
+                        }
                     }
                 }
             }
 
-            LibraryTab.PLAYLISTS -> {
+            LibraryView.AllPlaylists, LibraryView.SavedPlaylists -> {
                 LazyColumn(
                     contentPadding = PaddingValues(horizontal = 20.dp, vertical = 8.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp),
@@ -461,7 +827,7 @@ fun LibraryScreen(
                     items(playlists, key = { "lib_pl_${it.id}" }) { playlist ->
                         PlaylistCard(
                             playlist = playlist,
-                            onClick = { internalDrillDown = LibraryDrillDown.PlaylistDetail(playlist.id) },
+                            onClick = { drillDownStack = drillDownStack + LibraryDrillDown.PlaylistDetail(playlist.id) },
                             onPlayClick = {
                                 if (playlist.songs.isNotEmpty()) {
                                     onPlaySongs(playlist.songs, 0, false)
@@ -473,7 +839,7 @@ fun LibraryScreen(
                 }
             }
 
-            LibraryTab.GENRES -> {
+            LibraryView.Genres -> {
                 LazyColumn(
                     contentPadding = PaddingValues(horizontal = 20.dp, vertical = 8.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp),
@@ -484,7 +850,7 @@ fun LibraryScreen(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .matteSurface(RoundedCornerShape(16.dp))
-                                .clickable { internalDrillDown = LibraryDrillDown.GenreDetail(genre.name) }
+                                .clickable { drillDownStack = drillDownStack + LibraryDrillDown.GenreDetail(genre.name) }
                                 .padding(14.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
@@ -521,94 +887,7 @@ fun LibraryScreen(
                 }
             }
 
-            LibraryTab.FAVOURITES -> {
-                LazyColumn(
-                    contentPadding = PaddingValues(bottom = 150.dp),
-                    modifier = Modifier.fillMaxSize()
-                ) {
-                    item {
-                        SectionHeader(
-                            title = "Favourite Songs (${favoriteSongs.size})",
-                            actionLabel = if (favoriteSongs.isNotEmpty()) "Play All" else null,
-                            onActionClick = { onPlaySongs(favoriteSongs, 0, false) }
-                        )
-                    }
-                    itemsIndexed(favoriteSongs, key = { _, s -> "fav_s_${s.id}" }) { idx, song ->
-                        SongRowItem(
-                            song = song,
-                            isCurrentSong = currentSong?.id == song.id,
-                            isPlaying = isPlaying,
-                            onClick = { onPlaySongs(favoriteSongs, idx, false) },
-                            onFavoriteClick = { onToggleSongFavorite(song) },
-                            onMoreClick = { onOpenTrackContext(song) }
-                        )
-                    }
-
-                    if (favoriteAlbums.isNotEmpty()) {
-                        item {
-                            Spacer(modifier = Modifier.height(12.dp))
-                            SectionHeader(title = "Favourite Albums (${favoriteAlbums.size})")
-                        }
-                        items(favoriteAlbums, key = { "fav_al_${it.id}" }) { album ->
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(horizontal = 20.dp, vertical = 4.dp)
-                                    .matteSurface(RoundedCornerShape(14.dp))
-                                    .clickable { internalDrillDown = LibraryDrillDown.AlbumDetail(album.id) }
-                                    .padding(12.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                ArtworkImage(
-                                    artworkUri = album.albumArtUri,
-                                    contentDescription = album.title,
-                                    shape = RoundedCornerShape(10.dp),
-                                    seedTitle = album.title,
-                                    modifier = Modifier.size(48.dp)
-                                )
-                                Spacer(modifier = Modifier.width(12.dp))
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(album.title, style = MaterialTheme.typography.titleMedium)
-                                    Text(album.artist, style = MaterialTheme.typography.bodySmall)
-                                }
-                            }
-                        }
-                    }
-
-                    if (favoriteArtists.isNotEmpty()) {
-                        item {
-                            Spacer(modifier = Modifier.height(12.dp))
-                            SectionHeader(title = "Favourite Artists (${favoriteArtists.size})")
-                        }
-                        items(favoriteArtists, key = { "fav_ar_${it.id}" }) { artist ->
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(horizontal = 20.dp, vertical = 4.dp)
-                                    .matteSurface(RoundedCornerShape(14.dp))
-                                    .clickable { internalDrillDown = LibraryDrillDown.ArtistDetail(artist.id) }
-                                    .padding(12.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                ArtworkImage(
-                                    artworkUri = artist.artworkUri,
-                                    contentDescription = artist.name,
-                                    shape = CircleShape,
-                                    seedTitle = artist.name,
-                                    modifier = Modifier.size(48.dp)
-                                )
-                                Spacer(modifier = Modifier.width(12.dp))
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(artist.name, style = MaterialTheme.typography.titleMedium)
-                                    Text("${artist.songCount} tracks", style = MaterialTheme.typography.bodySmall)
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-
-            LibraryTab.RECENT -> {
+            LibraryView.Recent -> {
                 LazyColumn(
                     contentPadding = PaddingValues(bottom = 150.dp),
                     modifier = Modifier.fillMaxSize()
@@ -651,7 +930,7 @@ fun LibraryScreen(
                 }
             }
 
-            LibraryTab.FOLDERS -> {
+            LibraryView.Folders -> {
                 LazyColumn(
                     contentPadding = PaddingValues(horizontal = 20.dp, vertical = 8.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp),
@@ -663,7 +942,7 @@ fun LibraryScreen(
                                 .fillMaxWidth()
                                 .matteSurface(RoundedCornerShape(16.dp))
                                 .clickable(enabled = !folder.isExcluded) {
-                                    internalDrillDown = LibraryDrillDown.FolderDetail(folder.path)
+                                    drillDownStack = drillDownStack + LibraryDrillDown.FolderDetail(folder.path)
                                 }
                                 .padding(14.dp),
                             verticalAlignment = Alignment.CenterVertically
@@ -724,9 +1003,126 @@ fun LibraryScreen(
 }
 
 @Composable
+private fun LibraryCategoryCard(
+    category: LibraryCategory,
+    modifier: Modifier = Modifier
+) {
+    val cardShape = RoundedCornerShape(20.dp)
+
+    Box(
+        modifier = modifier
+            .aspectRatio(1f)
+            .clip(cardShape)
+            .background(
+                brush = Brush.linearGradient(colors = category.gradientColors),
+                shape = cardShape
+            )
+            .clickable(onClick = category.onClick)
+            .padding(16.dp)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(4.dp),
+            verticalArrangement = Arrangement.SpaceBetween
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(42.dp)
+                        .background(
+                            Color.White.copy(alpha = 0.2f),
+                            CircleShape
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = category.icon,
+                        contentDescription = null,
+                        tint = Color.White,
+                        modifier = Modifier.size(22.dp)
+                    )
+                }
+            }
+
+            Column {
+                Text(
+                    text = category.title,
+                    style = MaterialTheme.typography.titleMedium,
+                    color = Color.White,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                    text = category.countText,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color.White.copy(alpha = 0.8f),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun LibraryCategoryRow(
+    title: String,
+    icon: ImageVector,
+    itemCount: String? = null,
+    accentColor: Color = NocturnePalette.EmeraldGlow,
+    onClick: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(horizontal = 20.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
+            modifier = Modifier
+                .size(42.dp)
+                .background(
+                    accentColor.copy(alpha = 0.2f),
+                    CircleShape
+                ),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = accentColor,
+                modifier = Modifier.size(22.dp)
+            )
+        }
+        Spacer(modifier = Modifier.width(16.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleMedium,
+                color = NocturnePalette.TextPrimary
+            )
+            if (itemCount != null) {
+                Text(
+                    text = itemCount,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = NocturnePalette.TextMuted
+                )
+            }
+        }
+    }
+}
+
+@Composable
 private fun LibrarySortDropdown(
     expanded: Boolean,
-    selectedTab: LibraryTab,
+    currentView: LibraryView,
     userSettings: UserSettings,
     onDismiss: () -> Unit,
     onSetSongSort: (SongSortOption, SortDirection) -> Unit,
@@ -739,8 +1135,8 @@ private fun LibrarySortDropdown(
         onDismissRequest = onDismiss,
         modifier = Modifier.background(NocturnePalette.CharcoalSurface)
     ) {
-        when (selectedTab) {
-            LibraryTab.ALBUMS -> {
+        when (currentView) {
+            LibraryView.AllAlbums -> {
                 AlbumSortOption.entries.forEach { option ->
                     DropdownMenuItem(
                         text = {
@@ -759,7 +1155,7 @@ private fun LibrarySortDropdown(
                 }
             }
 
-            LibraryTab.ARTISTS -> {
+            LibraryView.AllArtists -> {
                 ArtistSortOption.entries.forEach { option ->
                     DropdownMenuItem(
                         text = {
@@ -830,6 +1226,7 @@ private fun AlbumDetailView(
     onPlayAlbum: (Boolean) -> Unit,
     onPlaySongAt: (Int) -> Unit,
     onToggleAlbumFavorite: () -> Unit,
+    onToggleAlbumPinned: () -> Unit,
     onToggleSongFavorite: (Song) -> Unit,
     onOpenTrackContext: (Song) -> Unit
 ) {
@@ -854,12 +1251,35 @@ private fun AlbumDetailView(
                         tint = NocturnePalette.TextPrimary
                     )
                 }
-                IconButton(onClick = onToggleAlbumFavorite) {
-                    Icon(
-                        imageVector = if (album.isFavorite) Icons.Rounded.Favorite else Icons.Rounded.FavoriteBorder,
-                        contentDescription = "Favorite Album",
-                        tint = if (album.isFavorite) NocturnePalette.CrimsonRose else NocturnePalette.TextSecondary
+                Row {
+                    FavoriteButton(
+                        isFavorite = album.isFavorite,
+                        onClick = onToggleAlbumFavorite,
+                        iconSize = 24.dp,
+                        buttonSize = 48.dp,
+                        unfavoriteColor = NocturnePalette.TextSecondary
                     )
+                    var showMenu by remember { mutableStateOf(false) }
+                    IconButton(onClick = { showMenu = true }) {
+                        Icon(
+                            imageVector = Icons.Rounded.MoreVert,
+                            contentDescription = "Options",
+                            tint = NocturnePalette.TextSecondary
+                        )
+                        DropdownMenu(
+                            expanded = showMenu,
+                            onDismissRequest = { showMenu = false },
+                            modifier = Modifier.background(NocturnePalette.CharcoalElevated)
+                        ) {
+                            DropdownMenuItem(
+                                text = { Text(if (album.isPinned) "Unpin Album" else "Pin Album", color = NocturnePalette.TextPrimary) },
+                                onClick = { 
+                                    onToggleAlbumPinned()
+                                    showMenu = false 
+                                }
+                            )
+                        }
+                    }
                 }
             }
 
@@ -971,13 +1391,13 @@ private fun ArtistDetailView(
                         tint = NocturnePalette.TextPrimary
                     )
                 }
-                IconButton(onClick = onToggleArtistFavorite) {
-                    Icon(
-                        imageVector = if (artist.isFavorite) Icons.Rounded.Favorite else Icons.Rounded.FavoriteBorder,
-                        contentDescription = "Favorite Artist",
-                        tint = if (artist.isFavorite) NocturnePalette.CrimsonRose else NocturnePalette.TextSecondary
-                    )
-                }
+                FavoriteButton(
+                    isFavorite = artist.isFavorite,
+                    onClick = onToggleArtistFavorite,
+                    iconSize = 24.dp,
+                    buttonSize = 48.dp,
+                    unfavoriteColor = NocturnePalette.TextSecondary
+                )
             }
 
             Column(
@@ -1297,7 +1717,7 @@ private fun CollectionTrackListDetailView(
 @Composable
 private fun ActionChipButton(
     label: String,
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    icon: ImageVector,
     primary: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier

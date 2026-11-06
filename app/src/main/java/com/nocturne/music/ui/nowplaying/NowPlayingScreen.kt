@@ -1,6 +1,16 @@
 package com.nocturne.music.ui.nowplaying
 
 import android.view.WindowManager
+import android.media.AudioDeviceCallback
+import android.media.AudioDeviceInfo
+import android.media.AudioManager
+import android.content.Context
+import android.content.Intent
+import android.os.Build
+import android.provider.Settings
+import androidx.compose.material.icons.rounded.BluetoothAudio
+import androidx.compose.material.icons.rounded.Headphones
+import androidx.compose.material.icons.rounded.Speaker
 import androidx.activity.ComponentActivity
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.Crossfade
@@ -12,7 +22,9 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.basicMarquee
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.animateScrollBy
 import androidx.compose.foundation.gestures.detectDragGestures
@@ -40,12 +52,17 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Favorite
 import androidx.compose.material.icons.rounded.FavoriteBorder
 import androidx.compose.material.icons.rounded.KeyboardArrowDown
 import androidx.compose.material.icons.rounded.KeyboardArrowUp
 import androidx.compose.material.icons.rounded.MoreVert
+import androidx.compose.material.icons.rounded.QueueMusic
+import androidx.compose.material.icons.rounded.Speed
+import androidx.compose.material.icons.rounded.Equalizer
+import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.Pause
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.Repeat
@@ -61,6 +78,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -106,12 +124,48 @@ import com.nocturne.music.model.Song
 import com.nocturne.music.model.TimeFormatUtils
 import com.nocturne.music.model.UserSettings
 import com.nocturne.music.ui.components.ArtworkImage
+import com.nocturne.music.ui.components.FavoriteButton
 import com.nocturne.music.ui.components.NowPlayingEqualizerBars
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import kotlin.math.abs
 import kotlin.math.roundToLong
+
+@Composable
+private fun rememberActiveAudioDevice(): AudioDeviceInfo? {
+    val context = LocalContext.current
+    val audioManager = remember { context.getSystemService(Context.AUDIO_SERVICE) as AudioManager }
+    var activeDevice by remember { mutableStateOf<AudioDeviceInfo?>(null) }
+
+    DisposableEffect(audioManager) {
+        fun updateDevice() {
+            val devices = audioManager.getDevices(AudioManager.GET_DEVICES_OUTPUTS)
+            val bluetooth = devices.find { it.type == AudioDeviceInfo.TYPE_BLUETOOTH_A2DP || it.type == AudioDeviceInfo.TYPE_BLE_HEADSET || it.type == AudioDeviceInfo.TYPE_BLUETOOTH_SCO }
+            if (bluetooth != null) {
+                activeDevice = bluetooth
+                return
+            }
+            val wired = devices.find { it.type == AudioDeviceInfo.TYPE_WIRED_HEADSET || it.type == AudioDeviceInfo.TYPE_WIRED_HEADPHONES || it.type == AudioDeviceInfo.TYPE_USB_HEADSET || it.type == AudioDeviceInfo.TYPE_USB_DEVICE }
+            if (wired != null) {
+                activeDevice = wired
+                return
+            }
+            activeDevice = devices.find { it.type == AudioDeviceInfo.TYPE_BUILTIN_SPEAKER } ?: devices.firstOrNull()
+        }
+
+        updateDevice()
+
+        val callback = object : AudioDeviceCallback() {
+            override fun onAudioDevicesAdded(addedDevices: Array<out AudioDeviceInfo>?) = updateDevice()
+            override fun onAudioDevicesRemoved(removedDevices: Array<out AudioDeviceInfo>?) = updateDevice()
+        }
+        audioManager.registerAudioDeviceCallback(callback, null)
+        onDispose { audioManager.unregisterAudioDeviceCallback(callback) }
+    }
+    return activeDevice
+}
+
 
 @Composable
 fun NowPlayingScreen(
@@ -244,7 +298,10 @@ fun NowPlayingScreen(
                                     currentPositionMs = playbackState.positionMs,
                                     onSeekToLine = onSeekTo,
                                     onImportLrcClick = onImportLrcClick,
-                                    onFetchOnlineClick = onFetchOnlineLyricsClick
+                                    onFetchOnlineClick = onFetchOnlineLyricsClick,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .aspectRatio(1f)
                                 )
                             } else {
                                 ArtworkShowcaseStage(
@@ -341,17 +398,13 @@ fun NowPlayingScreen(
 
                             Spacer(modifier = Modifier.width(12.dp))
 
-                            IconButton(
+                            FavoriteButton(
+                                isFavorite = song.isFavorite,
                                 onClick = { onToggleFavorite(song) },
-                                modifier = Modifier.size(46.dp)
-                            ) {
-                                Icon(
-                                    imageVector = if (song.isFavorite) Icons.Rounded.Favorite else Icons.Rounded.FavoriteBorder,
-                                    contentDescription = "Toggle Favorite",
-                                    tint = if (song.isFavorite) NocturnePalette.CrimsonRose else NocturnePalette.TextSecondary,
-                                    modifier = Modifier.size(26.dp)
-                                )
-                            }
+                                iconSize = 26.dp,
+                                buttonSize = 46.dp,
+                                unfavoriteColor = NocturnePalette.TextSecondary
+                            )
                         }
 
                         Spacer(modifier = Modifier.height(4.dp))
@@ -486,7 +539,7 @@ fun NowPlayingScreen(
                         // Primary Transport Controls
                         Row(
                             modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceEvenly,
+                            horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             IconButton(
@@ -518,17 +571,39 @@ fun NowPlayingScreen(
                                     playbackState.repeatMode == RepeatModeState.ONE -> 2
                                     else -> 0
                                 }
-                                Icon(
-                                    imageVector = when (modeState) {
-                                        1 -> Icons.Rounded.Repeat
-                                        2 -> Icons.Rounded.RepeatOne
-                                        3 -> Icons.Rounded.Shuffle
-                                        else -> Icons.Rounded.Repeat
-                                    },
-                                    contentDescription = "Playback Mode",
-                                    tint = if (modeState > 0) Color.White else NocturnePalette.TextSecondary,
-                                    modifier = Modifier.size(24.dp)
-                                )
+                                if (modeState == 3 || modeState == 0) {
+                                    val isShuffle = modeState == 3
+                                    Icon(
+                                        painter = androidx.compose.ui.res.painterResource(id = com.nocturne.music.R.drawable.ic_shuffle_new_custom),
+                                        contentDescription = "Shuffle",
+                                        tint = Color.Unspecified,
+                                        modifier = Modifier
+                                            .size(24.dp)
+                                            .graphicsLayer(alpha = 0.99f)
+                                            .drawWithCache {
+                                                val brush = if (isShuffle) Brush.linearGradient(
+                                                    colors = listOf(NocturnePalette.EmeraldGlow, Color(0xFF00E5FF))
+                                                ) else Brush.linearGradient(
+                                                    colors = listOf(Color.White, Color.White)
+                                                )
+                                                onDrawWithContent {
+                                                    drawContent()
+                                                    drawRect(brush, blendMode = androidx.compose.ui.graphics.BlendMode.SrcIn)
+                                                }
+                                            }
+                                    )
+                                } else {
+                                    Icon(
+                                        imageVector = when (modeState) {
+                                            1 -> Icons.Rounded.Repeat
+                                            2 -> Icons.Rounded.RepeatOne
+                                            else -> Icons.Rounded.Repeat
+                                        },
+                                        contentDescription = "Playback Mode",
+                                        tint = Color.White,
+                                        modifier = Modifier.size(24.dp)
+                                    )
+                                }
                             }
 
                             IconButton(
@@ -583,10 +658,23 @@ fun NowPlayingScreen(
                                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                     val isSleepActive = playbackState.sleepTimer.isActive
                                     Icon(
-                                        imageVector = Icons.Rounded.Timer,
+                                        painter = androidx.compose.ui.res.painterResource(id = com.nocturne.music.R.drawable.ic_timer_custom),
                                         contentDescription = "Sleep Timer",
-                                        tint = if (isSleepActive) Color.White else NocturnePalette.TextSecondary,
-                                        modifier = Modifier.size(22.dp)
+                                        tint = Color.Unspecified,
+                                        modifier = Modifier
+                                            .size(24.2.dp)
+                                            .graphicsLayer(alpha = 0.99f)
+                                            .drawWithCache {
+                                                val brush = if (isSleepActive) Brush.linearGradient(
+                                                    colors = listOf(NocturnePalette.EmeraldGlow, Color(0xFF00E5FF))
+                                                ) else Brush.linearGradient(
+                                                    colors = listOf(Color.White, Color.White)
+                                                )
+                                                onDrawWithContent {
+                                                    drawContent()
+                                                    drawRect(brush, blendMode = androidx.compose.ui.graphics.BlendMode.SrcIn)
+                                                }
+                                            }
                                     )
                                     if (isSleepActive) {
                                         Spacer(modifier = Modifier.height(1.dp))
@@ -603,8 +691,234 @@ fun NowPlayingScreen(
                     }
                 }
 
-                // 2. Spacer 24dp below control row
-                item(key = "spacer_lyrics") {
+                // 2. Extra actions row (Audio Output & Queue) between controls and lyrics
+                item(key = "extra_actions_row") {
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        // Audio Output Button (Left)
+                        val activeDevice = rememberActiveAudioDevice()
+                        val context = LocalContext.current
+                        val outputIcon = when (activeDevice?.type) {
+                            AudioDeviceInfo.TYPE_BLUETOOTH_A2DP,
+                            AudioDeviceInfo.TYPE_BLUETOOTH_SCO,
+                            AudioDeviceInfo.TYPE_BLE_HEADSET -> Icons.Rounded.BluetoothAudio
+                            AudioDeviceInfo.TYPE_WIRED_HEADSET,
+                            AudioDeviceInfo.TYPE_WIRED_HEADPHONES,
+                            AudioDeviceInfo.TYPE_USB_HEADSET,
+                            AudioDeviceInfo.TYPE_USB_DEVICE -> Icons.Rounded.Headphones
+                            else -> Icons.Rounded.Speaker
+                        }
+                        
+                        var showDeviceMenu by remember { mutableStateOf(false) }
+                        val audioManager = remember { context.getSystemService(Context.AUDIO_SERVICE) as AudioManager }
+                        val allDevices = remember(showDeviceMenu) {
+                            if (showDeviceMenu) {
+                                val rawDevices = audioManager.getDevices(AudioManager.GET_DEVICES_OUTPUTS).filter {
+                                    it.isSink && it.type != AudioDeviceInfo.TYPE_TELEPHONY
+                                }
+                                val out = mutableListOf<AudioDeviceInfo>()
+                                var hasInternal = false
+                                for (d in rawDevices) {
+                                    val isInternal = d.type == AudioDeviceInfo.TYPE_BUILTIN_SPEAKER ||
+                                                     d.type == AudioDeviceInfo.TYPE_BUILTIN_EARPIECE ||
+                                                     d.type == AudioDeviceInfo.TYPE_BUILTIN_SPEAKER_SAFE
+                                    if (isInternal) {
+                                        if (!hasInternal) {
+                                            out.add(d)
+                                            hasInternal = true
+                                        }
+                                    } else {
+                                        out.add(d)
+                                    }
+                                }
+                                out.distinctBy {
+                                    val name = it.productName.toString().takeIf { it.isNotBlank() } ?: "Unknown"
+                                    "${name}_${it.type}"
+                                }
+                            } else emptyList()
+                        }
+                        
+                        val permissionLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
+                            androidx.activity.result.contract.ActivityResultContracts.RequestPermission()
+                        ) { granted ->
+                            showDeviceMenu = true
+                        }
+
+                        Box {
+                            IconButton(
+                                onClick = {
+                                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
+                                        androidx.core.content.ContextCompat.checkSelfPermission(context, android.Manifest.permission.BLUETOOTH_CONNECT) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                                        permissionLauncher.launch(android.Manifest.permission.BLUETOOTH_CONNECT)
+                                    } else {
+                                        showDeviceMenu = true
+                                    }
+                                },
+                                modifier = Modifier.size(48.dp)
+                            ) {
+                                Icon(
+                                    imageVector = outputIcon,
+                                    contentDescription = "Audio Output",
+                                    tint = Color.White,
+                                    modifier = Modifier.size(24.dp)
+                                )
+                            }
+                            
+                            DropdownMenu(
+                                expanded = showDeviceMenu,
+                                onDismissRequest = { showDeviceMenu = false },
+                                modifier = Modifier
+                                    .background(NocturnePalette.ObsidianSurface, RoundedCornerShape(16.dp))
+                                    .padding(8.dp)
+                            ) {
+                                Text(
+                                    text = "Audio Output",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    color = NocturnePalette.TextSecondary,
+                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
+                                )
+                                Spacer(modifier = Modifier.height(4.dp))
+                                allDevices.forEach { device ->
+                                    val isCurrent = device.id == activeDevice?.id
+                                    val deviceIcon = when (device.type) {
+                                        AudioDeviceInfo.TYPE_BLUETOOTH_A2DP,
+                                        AudioDeviceInfo.TYPE_BLUETOOTH_SCO,
+                                        AudioDeviceInfo.TYPE_BLE_HEADSET -> Icons.Rounded.BluetoothAudio
+                                        AudioDeviceInfo.TYPE_WIRED_HEADSET,
+                                        AudioDeviceInfo.TYPE_WIRED_HEADPHONES,
+                                        AudioDeviceInfo.TYPE_USB_HEADSET,
+                                        AudioDeviceInfo.TYPE_USB_DEVICE -> Icons.Rounded.Headphones
+                                        else -> Icons.Rounded.Speaker
+                                    }
+                                    
+                                    val deviceName = try {
+                                        device.productName.toString().takeIf { it.isNotBlank() } ?: when (device.type) {
+                                            AudioDeviceInfo.TYPE_BUILTIN_SPEAKER,
+                                            AudioDeviceInfo.TYPE_BUILTIN_EARPIECE,
+                                            AudioDeviceInfo.TYPE_BUILTIN_SPEAKER_SAFE -> "Phone Speaker"
+                                            AudioDeviceInfo.TYPE_WIRED_HEADPHONES, AudioDeviceInfo.TYPE_WIRED_HEADSET -> "Wired Headphones"
+                                            else -> "Bluetooth Device"
+                                        }
+                                    } catch (e: SecurityException) {
+                                        "Bluetooth Device"
+                                    }
+                                    
+                                    DropdownMenuItem(
+                                        text = { 
+                                            Text(
+                                                text = deviceName,
+                                                color = if (isCurrent) NocturnePalette.EmeraldGlow else Color.White,
+                                                style = MaterialTheme.typography.bodyLarge,
+                                                fontWeight = if (isCurrent) androidx.compose.ui.text.font.FontWeight.Bold else androidx.compose.ui.text.font.FontWeight.Normal
+                                            )
+                                        },
+                                        leadingIcon = {
+                                            Icon(
+                                                imageVector = deviceIcon,
+                                                contentDescription = null,
+                                                tint = if (isCurrent) NocturnePalette.EmeraldGlow else NocturnePalette.TextSecondary,
+                                                modifier = Modifier.size(24.dp)
+                                            )
+                                        },
+                                        trailingIcon = if (isCurrent) {
+                                            {
+                                                Icon(
+                                                    Icons.Rounded.CheckCircle,
+                                                    contentDescription = "Selected",
+                                                    tint = NocturnePalette.EmeraldGlow,
+                                                    modifier = Modifier.size(20.dp)
+                                                )
+                                            }
+                                        } else null,
+                                        onClick = {
+                                            showDeviceMenu = false
+                                            if (!isCurrent) {
+                                                var switched = false
+                                                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                                                    try {
+                                                        switched = audioManager.setCommunicationDevice(device)
+                                                    } catch (_: Exception) {}
+                                                }
+                                                if (!switched && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                                                    try {
+                                                        val intent = Intent("com.android.settings.panel.action.MEDIA_OUTPUT").apply {
+                                                            putExtra("com.android.settings.panel.extra.PACKAGE_NAME", context.packageName)
+                                                            flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                                                        }
+                                                        context.startActivity(intent)
+                                                    } catch (_: Exception) {}
+                                                }
+                                            }
+                                        }
+                                    )
+                                }
+                            }
+                        }
+
+                        // Share & Queue Group (Right)
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            // Share Button
+                            IconButton(
+                                onClick = {
+                                    val textToShare = buildString {
+                                        append("Listening to ${song.title}")
+                                        append(" by ${song.artist}")
+                                        if (song.album.isNotBlank() && song.album != "Unknown Album" && song.album != "Music") {
+                                            append(" from the album ${song.album}")
+                                        }
+                                    }
+                                    val sendIntent = Intent().apply {
+                                        action = Intent.ACTION_SEND
+                                        putExtra(Intent.EXTRA_TEXT, textToShare)
+                                        song.albumArtUri?.let { uriStr ->
+                                            try {
+                                                val uri = android.net.Uri.parse(uriStr)
+                                                putExtra(Intent.EXTRA_STREAM, uri)
+                                                type = "image/*"
+                                                flags = Intent.FLAG_GRANT_READ_URI_PERMISSION
+                                            } catch (_: Exception) {
+                                                type = "text/plain"
+                                            }
+                                        } ?: run {
+                                            type = "text/plain"
+                                        }
+                                    }
+                                    val shareIntent = Intent.createChooser(sendIntent, "Share Track")
+                                    context.startActivity(shareIntent)
+                                },
+                                modifier = Modifier.size(48.dp)
+                            ) {
+                                Icon(
+                                    painter = androidx.compose.ui.res.painterResource(id = com.nocturne.music.R.drawable.ic_share_custom),
+                                    contentDescription = "Share",
+                                    tint = Color.White,
+                                    modifier = Modifier.size(24.dp)
+                                )
+                            }
+
+                            // Queue Button (Right)
+                            IconButton(
+                                onClick = { showQueueSheet = true },
+                                modifier = Modifier.size(48.dp)
+                            ) {
+                                Icon(
+                                    painter = androidx.compose.ui.res.painterResource(id = com.nocturne.music.R.drawable.ic_queue_custom),
+                                    contentDescription = "Queue",
+                                    tint = Color.White,
+                                    modifier = Modifier.size(24.dp)
+                                )
+                            }
+                        }
+                    }
+
                     Spacer(modifier = Modifier.height(24.dp))
                 }
 
@@ -637,16 +951,18 @@ fun NowPlayingScreen(
 
         // Queue Bottom Sheet
         if (showQueueSheet) {
+            val queueSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
             ModalBottomSheet(
                 onDismissRequest = { showQueueSheet = false },
+                sheetState = queueSheetState,
                 containerColor = NocturnePalette.ObsidianSurface,
                 contentColor = NocturnePalette.TextPrimary
             ) {
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(480.dp)
-                        .padding(16.dp)
+                        .height(520.dp)
+                        .padding(horizontal = 16.dp, vertical = 8.dp)
                 ) {
                     NowPlayingQueueStage(
                         queue = playbackState.queue,
@@ -703,31 +1019,90 @@ private fun NowPlayingTopBar(
             }
             DropdownMenu(
                 expanded = menuExpanded,
-                onDismissRequest = { menuExpanded = false }
+                onDismissRequest = { menuExpanded = false },
+                containerColor = NocturnePalette.CharcoalElevated,
+                shape = RoundedCornerShape(18.dp),
+                border = BorderStroke(0.8.dp, NocturnePalette.GlassBorderSpecular)
             ) {
                 DropdownMenuItem(
-                    text = { Text("Queue") },
+                    text = {
+                        Text(
+                            "Queue",
+                            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium),
+                            color = NocturnePalette.TextPrimary
+                        )
+                    },
+                    leadingIcon = {
+                        Icon(
+                            imageVector = Icons.Rounded.QueueMusic,
+                            contentDescription = null,
+                            tint = NocturnePalette.EmeraldGlow,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    },
                     onClick = {
                         menuExpanded = false
                         onOpenQueue()
                     }
                 )
                 DropdownMenuItem(
-                    text = { Text(String.format("Playback speed (%.1fx)", playbackSpeed)) },
+                    text = {
+                        Text(
+                            String.format("Playback speed (%.1fx)", playbackSpeed),
+                            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium),
+                            color = NocturnePalette.TextPrimary
+                        )
+                    },
+                    leadingIcon = {
+                        Icon(
+                            imageVector = Icons.Rounded.Speed,
+                            contentDescription = null,
+                            tint = NocturnePalette.EmeraldGlow,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    },
                     onClick = {
                         menuExpanded = false
                         onOpenPlaybackSpeed()
                     }
                 )
                 DropdownMenuItem(
-                    text = { Text("DSP / EQ") },
+                    text = {
+                        Text(
+                            "DSP / EQ",
+                            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium),
+                            color = NocturnePalette.TextPrimary
+                        )
+                    },
+                    leadingIcon = {
+                        Icon(
+                            imageVector = Icons.Rounded.Equalizer,
+                            contentDescription = null,
+                            tint = NocturnePalette.EmeraldGlow,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    },
                     onClick = {
                         menuExpanded = false
                         onOpenEqualizer()
                     }
                 )
                 DropdownMenuItem(
-                    text = { Text("Edit artwork") },
+                    text = {
+                        Text(
+                            "Edit artwork",
+                            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium),
+                            color = NocturnePalette.TextPrimary
+                        )
+                    },
+                    leadingIcon = {
+                        Icon(
+                            imageVector = Icons.Rounded.Edit,
+                            contentDescription = null,
+                            tint = NocturnePalette.EmeraldGlow,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    },
                     onClick = {
                         menuExpanded = false
                         onEditArtworkClick()
@@ -930,46 +1305,41 @@ fun InteractiveLyricsStage(
     // When lyrics view opens or song changes, center active line right away
     LaunchedEffect(song.id, lyricsDocument.songId) {
         if (lyricsDocument.isSynced && activeLineIndex >= 0) {
-            listState.scrollToItem(activeLineIndex)
+            listState.scrollToItem(activeLineIndex, scrollOffset = 0)
         }
     }
 
     // Smooth center-aligned follow scroll logic
-    LaunchedEffect(lyricsDocument.songId) {
-        var isInitial = true
-        snapshotFlow { activeLineIndex }
-            .collectLatest { targetIndex ->
-                if (lyricsDocument.isSynced && targetIndex >= 0) {
-                    val layoutInfo = listState.layoutInfo
-                    val viewportHeight = layoutInfo.viewportEndOffset - layoutInfo.viewportStartOffset
-                    val viewportCenter = layoutInfo.viewportStartOffset + viewportHeight / 2
-                    val visibleItems = layoutInfo.visibleItemsInfo
-                    val targetItem = visibleItems.find { it.index == targetIndex }
+    LaunchedEffect(activeLineIndex, containerHeight) {
+        if (!userManualScrollActive && lyricsDocument.isSynced && activeLineIndex >= 0) {
+            val layoutInfo = listState.layoutInfo
+            val viewportHeight = layoutInfo.viewportEndOffset - layoutInfo.viewportStartOffset
+            if (viewportHeight == 0) return@LaunchedEffect
 
-                    if (isInitial || targetItem == null || abs(targetIndex - listState.firstVisibleItemIndex) > 6) {
-                        isInitial = false
-                        listState.scrollToItem(targetIndex)
-                    } else if (!userManualScrollActive) {
-                        val itemCenter = targetItem.offset + targetItem.size / 2
-                        val distance = itemCenter - viewportCenter
-                        if (distance != 0) {
-                            listState.animateScrollBy(
-                                value = distance.toFloat(),
-                                animationSpec = tween(
-                                    durationMillis = 500,
-                                    easing = CubicBezierEasing(0.22f, 1f, 0.36f, 1f)
-                                )
-                            )
-                        }
-                    }
+            val viewportCenter = layoutInfo.viewportStartOffset + viewportHeight / 2
+            val visibleItems = layoutInfo.visibleItemsInfo
+            val targetItem = visibleItems.find { it.index == activeLineIndex }
+
+            if (targetItem == null || abs(activeLineIndex - listState.firstVisibleItemIndex) > 6) {
+                listState.scrollToItem(activeLineIndex, scrollOffset = 0)
+            } else {
+                val itemCenter = targetItem.offset + targetItem.size / 2
+                val distance = itemCenter - viewportCenter
+                if (distance != 0) {
+                    listState.animateScrollBy(
+                        value = distance.toFloat(),
+                        animationSpec = tween(
+                            durationMillis = 500,
+                            easing = CubicBezierEasing(0.22f, 1f, 0.36f, 1f)
+                        )
+                    )
                 }
             }
+        }
     }
 
     Box(
         modifier = modifier
-            .fillMaxWidth()
-            .aspectRatio(1f)
             .onSizeChanged { containerHeight = it.height }
             .drawWithCache {
                 val brush = Brush.verticalGradient(
@@ -1144,18 +1514,18 @@ private fun ArtworkShowcaseStage(
         val artShape = RoundedCornerShape(14.dp)
         if (smoothTransitions) {
             AnimatedContent(
-                targetState = song,
+                targetState = Triple(song.id, song.albumArtUri, song.customArtworkUpdatedAtMs),
                 transitionSpec = {
                     fadeIn(tween(380)) togetherWith fadeOut(tween(280))
                 },
                 label = "artworkCrossfade"
-            ) { targetSong ->
+            ) { targetArt ->
                 ArtworkImage(
-                    artworkUri = targetSong.albumArtUri,
-                    artworkKey = "${targetSong.id}_${targetSong.customArtworkUpdatedAtMs}",
-                    contentDescription = targetSong.title,
+                    artworkUri = targetArt.second,
+                    artworkKey = "${targetArt.first}_${targetArt.third}",
+                    contentDescription = song.title,
                     shape = artShape,
-                    seedTitle = targetSong.album,
+                    seedTitle = song.album,
                     iconSize = 56.dp,
                     modifier = Modifier.fillMaxSize()
                 )
@@ -1183,6 +1553,28 @@ private fun NowPlayingQueueStage(
     onMoveQueueItem: (Int, Int) -> Unit,
     onRemoveQueueItem: (Int) -> Unit
 ) {
+    val listState = rememberLazyListState()
+
+    // Intercept unconsumed vertical scroll delta so list scrolling never triggers bottom sheet dismissal
+    val queueNestedScrollConnection = remember {
+        object : NestedScrollConnection {
+            override fun onPostScroll(
+                consumed: Offset,
+                available: Offset,
+                source: NestedScrollSource
+            ): Offset {
+                return Offset(0f, available.y)
+            }
+        }
+    }
+
+    // Scroll to active song when queue opens
+    LaunchedEffect(Unit) {
+        if (currentIndex in queue.indices) {
+            listState.scrollToItem((currentIndex - 1).coerceAtLeast(0))
+        }
+    }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -1202,7 +1594,7 @@ private fun NowPlayingQueueStage(
             )
             if (currentIndex >= 0) {
                 Text(
-                    text = "Playing #$currentIndex",
+                    text = "Playing #${currentIndex + 1}",
                     style = MaterialTheme.typography.bodySmall,
                     color = Color.White
                 )
@@ -1212,9 +1604,12 @@ private fun NowPlayingQueueStage(
         Spacer(modifier = Modifier.height(4.dp))
 
         LazyColumn(
+            state = listState,
             contentPadding = PaddingValues(vertical = 6.dp),
             verticalArrangement = Arrangement.spacedBy(4.dp),
-            modifier = Modifier.fillMaxSize()
+            modifier = Modifier
+                .fillMaxSize()
+                .nestedScroll(queueNestedScrollConnection)
         ) {
             itemsIndexed(
                 items = queue,

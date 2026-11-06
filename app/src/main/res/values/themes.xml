@@ -8,4 +8,11 @@
         <item name="android:colorBackground">@color/amoled_black</item>
         <item name="android:windowLightStatusBar">false</item>
     </style>
+
+    <!-- Seamless Splash Screen Starting Theme -->
+    <style name="Theme.Nocturne.Starting" parent="Theme.SplashScreen">
+        <item name="windowSplashScreenBackground">@color/amoled_black</item>
+        <item name="windowSplashScreenAnimatedIcon">@drawable/ic_splash_logo</item>
+        <item name="postSplashScreenTheme">@style/Theme.Nocturne</item>
+    </style>
 </resources>

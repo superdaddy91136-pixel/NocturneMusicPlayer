@@ -30,6 +30,7 @@ import com.nocturne.music.model.SongSortOption
 import com.nocturne.music.model.SortDirection
 import com.nocturne.music.model.UserSettings
 import com.nocturne.music.playback.PlaybackController
+import com.nocturne.music.library.BackupManager
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
@@ -54,7 +55,8 @@ class NocturneViewModel @Inject constructor(
     private val lyricsRepository: LyricsRepository,
     private val preferencesRepository: UserPreferencesRepository,
     val artworkManager: com.nocturne.music.library.ArtworkManager,
-    private val isolatedArtworkColorExtractor: com.nocturne.music.designsystem.IsolatedArtworkColorExtractor
+    private val isolatedArtworkColorExtractor: com.nocturne.music.designsystem.IsolatedArtworkColorExtractor,
+    private val backupManager: BackupManager
 ) : ViewModel() {
 
     val playbackState: StateFlow<PlaybackUiState> = playbackController.playbackState
@@ -89,6 +91,12 @@ class NocturneViewModel @Inject constructor(
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     val favoriteAlbums: StateFlow<List<Album>> = libraryRepository.favoriteAlbumsFlow
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val pinnedAlbums: StateFlow<List<Album>> = libraryRepository.albumsFlow
+        .map { albums -> 
+            albums.filter { it.isPinned }.sortedByDescending { it.pinnedAtMs ?: 0L }
+        }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     val favoriteArtists: StateFlow<List<Artist>> = libraryRepository.favoriteArtistsFlow
@@ -154,6 +162,19 @@ class NocturneViewModel @Inject constructor(
 
     init {
         observeCurrentTrackChanges()
+        observeUserSettingsForAppIcon()
+    }
+
+    private fun observeUserSettingsForAppIcon() {
+        viewModelScope.launch {
+            userSettings
+                .map { it.selectedAppIconId }
+                .distinctUntilChanged()
+                .collectLatest { iconId ->
+                    val option = com.nocturne.music.model.AppIconOption.fromId(iconId)
+                    com.nocturne.music.util.AppIconManager.setAppIcon(appContext, option)
+                }
+        }
     }
 
     private fun observeCurrentTrackChanges() {
@@ -179,10 +200,19 @@ class NocturneViewModel @Inject constructor(
 
     fun scanMediaLibrary() {
         viewModelScope.launch {
-            val count = libraryRepository.refreshLibraryFromMediaStore()
-            playbackController.restorePreviousSessionIfNeeded()
-            if (count > 0) {
-                postStatusMessage("Indexed $count audio tracks")
+            try {
+                val count = libraryRepository.refreshLibraryFromMediaStore()
+                playbackController.restorePreviousSessionIfNeeded()
+                if (count > 0) {
+                    postStatusMessage("Indexed $count audio tracks")
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+                postStatusMessage("Error scanning library")
+            } finally {
+                if (!userSettings.value.hasCompletedInitialScan) {
+                    preferencesRepository.setHasCompletedInitialScan(true)
+                }
             }
         }
     }
@@ -258,6 +288,12 @@ class NocturneViewModel @Inject constructor(
     fun toggleAlbumFavorite(album: Album) {
         viewModelScope.launch {
             libraryRepository.toggleAlbumFavorite(album.id, album.isFavorite)
+        }
+    }
+
+    fun toggleAlbumPinned(album: Album) {
+        viewModelScope.launch {
+            libraryRepository.toggleAlbumPinned(album.id, album.isPinned)
         }
     }
 
@@ -459,12 +495,81 @@ class NocturneViewModel @Inject constructor(
         viewModelScope.launch { preferencesRepository.setArtistSort(option) }
     }
 
+    fun updateProfile(name: String, pictureUri: String?) {
+        viewModelScope.launch {
+            preferencesRepository.setProfileInfo(name, pictureUri)
+        }
+    }
+
+    fun setAppIcon(iconOption: com.nocturne.music.model.AppIconOption) {
+        viewModelScope.launch {
+            preferencesRepository.setSelectedAppIcon(iconOption.id)
+            com.nocturne.music.util.AppIconManager.setAppIcon(appContext, iconOption)
+            postStatusMessage("App icon set to ${iconOption.title}")
+        }
+    }
+
+    fun exportBackup() {
+        viewModelScope.launch {
+            try {
+                postStatusMessage("Preparing backup...")
+                val json = backupManager.createBackupJson()
+                
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+                    val contentValues = android.content.ContentValues().apply {
+                        put(android.provider.MediaStore.Downloads.DISPLAY_NAME, "Nocturne_Backup_${System.currentTimeMillis()}.json")
+                        put(android.provider.MediaStore.Downloads.MIME_TYPE, "application/json")
+                    }
+                    val uri = appContext.contentResolver.insert(android.provider.MediaStore.Downloads.EXTERNAL_CONTENT_URI, contentValues)
+                    if (uri != null) {
+                        appContext.contentResolver.openOutputStream(uri)?.use { out ->
+                            out.write(json.toByteArray())
+                        }
+                        postStatusMessage("Exported backup to Downloads folder")
+                    } else {
+                        postStatusMessage("Failed to export backup")
+                    }
+                } else {
+                    val file = java.io.File(android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS), "Nocturne_Backup_${System.currentTimeMillis()}.json")
+                    file.writeText(json)
+                    postStatusMessage("Exported backup to Downloads folder")
+                }
+            } catch (e: Exception) {
+                postStatusMessage("Error during export")
+            }
+        }
+    }
+
+    fun importBackup(uri: android.net.Uri) {
+        viewModelScope.launch {
+            try {
+                postStatusMessage("Restoring backup...")
+                val success = backupManager.restoreBackup(uri)
+                if (success) {
+                    postStatusMessage("Restored backup successfully")
+                } else {
+                    postStatusMessage("Failed to restore backup")
+                }
+            } catch (e: Exception) {
+                postStatusMessage("Error during restore")
+            }
+        }
+    }
+
     fun setGaplessPlayback(enabled: Boolean) {
         viewModelScope.launch { preferencesRepository.setGaplessPlayback(enabled) }
     }
 
     fun setCrossfadeDurationSec(seconds: Int) {
         viewModelScope.launch { preferencesRepository.setCrossfadeDurationSec(seconds) }
+    }
+
+    fun setIsLibraryGridView(isGrid: Boolean) {
+        viewModelScope.launch { preferencesRepository.setIsLibraryGridView(isGrid) }
+    }
+
+    fun setIsLibraryLandingGridView(isGrid: Boolean) {
+        viewModelScope.launch { preferencesRepository.setIsLibraryLandingGridView(isGrid) }
     }
 
     fun setVolumeNormalization(enabled: Boolean) {

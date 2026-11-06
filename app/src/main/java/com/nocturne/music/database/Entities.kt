@@ -134,6 +134,12 @@ data class PlayHistoryEntity(
     val listenedDurationMs: Long = 0L
 )
 
+@Entity(tableName = "pinned_albums")
+data class PinnedAlbumEntity(
+    @PrimaryKey val albumId: Long,
+    val pinnedAtMs: Long = System.currentTimeMillis()
+)
+
 @Entity(tableName = "favorite_albums")
 data class FavoriteAlbumEntity(
     @PrimaryKey val albumId: Long,

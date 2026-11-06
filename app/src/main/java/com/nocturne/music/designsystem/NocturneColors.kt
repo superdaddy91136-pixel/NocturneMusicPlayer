@@ -29,8 +29,8 @@ object NocturnePalette {
     val LiquidViolet = Color(0xFFA98BFF)
     val LiquidCyan = Color(0xFF6AE2FF)
     val WarmAmber = Color(0xFFFFB86C)
-    val EmeraldGlow = Color(0xFF5CE1A6)
-    val CrimsonRose = Color(0xFFFF6B8B)
+    val EmeraldGlow = Color(0xFF57CF8F)
+    val CrimsonRose = Color(0xFFF05B78)
 
     // Typography Hierarchy
     val TextPrimary = Color(0xFFF5F7FB)

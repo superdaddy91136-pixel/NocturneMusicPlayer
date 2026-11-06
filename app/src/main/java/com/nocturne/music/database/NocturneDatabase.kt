@@ -11,12 +11,13 @@ import androidx.room.RoomDatabase
         PlayHistoryEntity::class,
         FavoriteAlbumEntity::class,
         FavoriteArtistEntity::class,
+        PinnedAlbumEntity::class,
         LyricsCacheEntity::class,
         SearchHistoryEntity::class,
         ExcludedFolderEntity::class,
         CustomArtworkEntity::class
     ],
-    version = 2,
+    version = 3,
     exportSchema = false
 )
 abstract class NocturneDatabase : RoomDatabase() {

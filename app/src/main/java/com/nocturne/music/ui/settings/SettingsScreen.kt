@@ -19,7 +19,9 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
 import androidx.compose.material.icons.rounded.Album
+import androidx.compose.material.icons.rounded.AppShortcut
 import androidx.compose.material.icons.rounded.Equalizer
 import androidx.compose.material.icons.rounded.Folder
 import androidx.compose.material.icons.rounded.Info
@@ -60,6 +62,7 @@ fun SettingsScreen(
     totalSongsCount: Int,
     onBack: () -> Unit,
     onOpenEqualizerSheet: () -> Unit,
+    onOpenAppIconPicker: () -> Unit,
     onSetGaplessPlayback: (Boolean) -> Unit,
     onSetCrossfadeSec: (Int) -> Unit,
     onSetVolumeNormalization: (Boolean) -> Unit,
@@ -358,6 +361,40 @@ fun SettingsScreen(
                     checked = userSettings.reducedMotion,
                     onCheckedChange = onSetReducedMotion
                 )
+            }
+        }
+
+        // Appearance -> App Icon Selection
+        item {
+            SettingsGroupCard(title = "Appearance & App Icon", icon = Icons.Rounded.AppShortcut) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(NocturnePalette.CharcoalElevated)
+                        .clickable(onClick = onOpenAppIconPicker)
+                        .padding(14.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "App Icon",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = NocturnePalette.TextPrimary
+                        )
+                        Text(
+                            text = "Active: ${com.nocturne.music.model.AppIconOption.fromId(userSettings.selectedAppIconId).title}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = atmosphere.primaryAccent
+                        )
+                    }
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Rounded.KeyboardArrowRight,
+                        contentDescription = "Select App Icon",
+                        tint = atmosphere.primaryAccent
+                    )
+                }
             }
         }
 

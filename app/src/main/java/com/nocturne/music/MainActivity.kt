@@ -46,8 +46,23 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.size
+import androidx.compose.ui.res.painterResource
+import androidx.compose.material3.Icon
+import androidx.compose.foundation.layout.width
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.launch
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.History
+import androidx.compose.material.icons.rounded.Person
+import androidx.compose.material.icons.rounded.Save
+import androidx.compose.material.icons.rounded.Settings
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -76,20 +91,39 @@ import com.nocturne.music.ui.library.LibraryScreen
 import com.nocturne.music.ui.nowplaying.NowPlayingScreen
 import com.nocturne.music.ui.nowplaying.LyricsFocusScreen
 import com.nocturne.music.ui.search.SearchScreen
+import com.nocturne.music.ui.settings.AppIconSelectionScreen
 import com.nocturne.music.ui.settings.SettingsScreen
 import com.nocturne.music.ui.viewmodel.NocturneViewModel
+import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import dagger.hilt.android.AndroidEntryPoint
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        val splashScreen = installSplashScreen()
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
 
         setContent {
             val viewModel: NocturneViewModel = hiltViewModel()
             val atmosphere by viewModel.artworkAtmosphere.collectAsStateWithLifecycle()
+            val userSettings by viewModel.userSettings.collectAsStateWithLifecycle()
+            
+            val requiredAudioPermission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                Manifest.permission.READ_MEDIA_AUDIO
+            } else {
+                Manifest.permission.READ_EXTERNAL_STORAGE
+            }
+
+            val hasAudioPermission = ContextCompat.checkSelfPermission(
+                this,
+                requiredAudioPermission
+            ) == PackageManager.PERMISSION_GRANTED
+            
+            splashScreen.setKeepOnScreenCondition {
+                hasAudioPermission && !userSettings.hasCompletedInitialScan
+            }
 
             NocturneTheme(atmosphere = atmosphere) {
                 NocturneRootApp(viewModel = viewModel)
@@ -117,6 +151,7 @@ fun NocturneRootApp(
 
     val favoriteSongs by viewModel.favoriteSongs.collectAsStateWithLifecycle()
     val favoriteAlbums by viewModel.favoriteAlbums.collectAsStateWithLifecycle()
+    val pinnedAlbums by viewModel.pinnedAlbums.collectAsStateWithLifecycle()
     val favoriteArtists by viewModel.favoriteArtists.collectAsStateWithLifecycle()
     val recentlyPlayed by viewModel.recentlyPlayed.collectAsStateWithLifecycle()
     val recentlyAdded by viewModel.recentlyAdded.collectAsStateWithLifecycle()
@@ -136,8 +171,37 @@ fun NocturneRootApp(
     var currentDestination by rememberSaveable { mutableStateOf(PrimaryDestination.HOME) }
     var isNowPlayingExpanded by rememberSaveable { mutableStateOf(false) }
     var isSettingsOpen by rememberSaveable { mutableStateOf(false) }
+    var isAppIconPickerOpen by rememberSaveable { mutableStateOf(false) }
     var isRecentsOpen by rememberSaveable { mutableStateOf(false) }
+    var isProfileOpen by rememberSaveable { mutableStateOf(false) }
+    var isBackupOpen by rememberSaveable { mutableStateOf(false) }
     var externalLibraryDrillDown by remember { mutableStateOf<LibraryDrillDown?>(null) }
+    var previousDestinationBeforeDrillDown by remember { mutableStateOf<PrimaryDestination?>(null) }
+    var isLibraryDrillDownActive by remember { mutableStateOf(false) }
+
+    val openExternalDrillDown: (LibraryDrillDown) -> Unit = { drillDown ->
+        if (currentDestination != PrimaryDestination.LIBRARY) {
+            previousDestinationBeforeDrillDown = currentDestination
+        }
+        externalLibraryDrillDown = drillDown
+        currentDestination = PrimaryDestination.LIBRARY
+    }
+
+    val clearExternalDrillDown: () -> Unit = {
+        externalLibraryDrillDown = null
+        previousDestinationBeforeDrillDown?.let { prev ->
+            currentDestination = prev
+            previousDestinationBeforeDrillDown = null
+        }
+    }
+
+    val isSecondaryScreenOpen = isSettingsOpen ||
+            isAppIconPickerOpen ||
+            isRecentsOpen ||
+            isProfileOpen ||
+            isBackupOpen ||
+            externalLibraryDrillDown != null ||
+            (currentDestination == PrimaryDestination.LIBRARY && isLibraryDrillDownActive)
 
     // Interactive Dialogs & Sheets state
     var contextMenuSong by remember { mutableStateOf<Song?>(null) }
@@ -173,6 +237,9 @@ fun NocturneRootApp(
         )
     }
 
+    val isShowingSplash = hasAudioPermission && !userSettings.hasCompletedInitialScan
+    val showMiniPlayerAndBottomNav = !isNowPlayingExpanded && !isSecondaryScreenOpen && !isShowingSplash
+
     val permissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestMultiplePermissions()
     ) { grants ->
@@ -180,13 +247,17 @@ fun NocturneRootApp(
             ContextCompat.checkSelfPermission(context, requiredAudioPermission) == PackageManager.PERMISSION_GRANTED
         hasAudioPermission = granted
         if (granted) {
-            viewModel.scanMediaLibrary()
+            if (!userSettings.hasCompletedInitialScan) {
+                viewModel.scanMediaLibrary()
+            }
         }
     }
 
     LaunchedEffect(hasAudioPermission) {
         if (hasAudioPermission) {
-            viewModel.scanMediaLibrary()
+            if (!userSettings.hasCompletedInitialScan) {
+                viewModel.scanMediaLibrary()
+            }
         } else {
             val permsToRequest = buildList {
                 add(requiredAudioPermission)
@@ -206,14 +277,19 @@ fun NocturneRootApp(
         }
     }
 
-    BackHandler(enabled = isNowPlayingExpanded || isSettingsOpen || isRecentsOpen || externalLibraryDrillDown != null) {
+    BackHandler(enabled = isNowPlayingExpanded || isAppIconPickerOpen || isSettingsOpen || isRecentsOpen || isProfileOpen || isBackupOpen) {
         when {
             isNowPlayingExpanded -> isNowPlayingExpanded = false
+            isAppIconPickerOpen -> isAppIconPickerOpen = false
             isSettingsOpen -> isSettingsOpen = false
             isRecentsOpen -> isRecentsOpen = false
-            externalLibraryDrillDown != null -> externalLibraryDrillDown = null
+            isProfileOpen -> isProfileOpen = false
+            isBackupOpen -> isBackupOpen = false
         }
     }
+
+    val drawerState = androidx.compose.material3.rememberDrawerState(initialValue = androidx.compose.material3.DrawerValue.Closed)
+    val coroutineScope = androidx.compose.runtime.rememberCoroutineScope()
 
     Box(
         modifier = Modifier
@@ -222,9 +298,164 @@ fun NocturneRootApp(
     ) {
         val songColor by viewModel.currentSongColor.collectAsStateWithLifecycle()
 
-        Scaffold(
-            containerColor = Color.Transparent,
-            snackbarHost = { SnackbarHost(hostState = snackbarHostState) }
+        androidx.compose.material3.ModalNavigationDrawer(
+            drawerState = drawerState,
+            scrimColor = Color.Black.copy(alpha = 0.6f),
+            drawerContent = {
+                androidx.compose.material3.ModalDrawerSheet(
+                    drawerContainerColor = NocturnePalette.CharcoalElevated,
+                    drawerContentColor = NocturnePalette.TextPrimary,
+                    modifier = Modifier.width(300.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(24.dp)
+                            .statusBarsPadding()
+                    ) {
+                        Column {
+                            Box(
+                                modifier = Modifier
+                                    .size(72.dp)
+                                    .clip(androidx.compose.foundation.shape.CircleShape)
+                                    .background(NocturnePalette.ObsidianSurface),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                if (userSettings.profilePictureUri != null) {
+                                    coil.compose.AsyncImage(
+                                        model = userSettings.profilePictureUri,
+                                        contentDescription = "Profile Picture",
+                                        contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+                                        modifier = Modifier.fillMaxSize()
+                                    )
+                                } else {
+                                    Icon(
+                                        imageVector = Icons.Rounded.Person,
+                                        contentDescription = "Profile",
+                                        tint = NocturnePalette.EmeraldGlow,
+                                        modifier = Modifier.size(36.dp)
+                                    )
+                                }
+                            }
+                            Spacer(modifier = Modifier.height(16.dp))
+                            Text(
+                                text = userSettings.profileName,
+                                fontSize = 20.sp,
+                                fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+                                color = Color.White
+                            )
+                        }
+                        
+                        androidx.compose.material3.IconButton(
+                            onClick = { coroutineScope.launch { drawerState.close() } },
+                            modifier = Modifier.align(Alignment.TopEnd)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Rounded.Close,
+                                contentDescription = "Close Menu",
+                                tint = NocturnePalette.TextSecondary
+                            )
+                        }
+                    }
+
+                    androidx.compose.material3.HorizontalDivider(color = NocturnePalette.GlassBorderHairline)
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    class MenuItem(val icon: ImageVector, val label: String, val action: () -> Unit)
+
+                    val menuItems = listOf(
+                        MenuItem(Icons.Rounded.Person, "Edit Profile") { isProfileOpen = true },
+                        MenuItem(Icons.Rounded.Save, "Backup & Restore") { isBackupOpen = true },
+                        MenuItem(Icons.Rounded.History, "Listening History") { isRecentsOpen = true },
+                        MenuItem(Icons.Rounded.Settings, "Settings") { isSettingsOpen = true }
+                    )
+
+                    menuItems.forEach { item ->
+                        androidx.compose.material3.NavigationDrawerItem(
+                            label = { Text(item.label, fontSize = 16.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Medium) },
+                            icon = { Icon(item.icon, contentDescription = null, tint = NocturnePalette.EmeraldGlow) },
+                            selected = false,
+                            onClick = {
+                                coroutineScope.launch {
+                                    drawerState.close()
+                                    item.action()
+                                }
+                            },
+                            colors = androidx.compose.material3.NavigationDrawerItemDefaults.colors(
+                                unselectedContainerColor = Color.Transparent,
+                                unselectedTextColor = NocturnePalette.TextPrimary,
+                                unselectedIconColor = NocturnePalette.EmeraldGlow
+                            ),
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)
+                        )
+                    }
+                }
+            }
+        ) {
+            Box(modifier = Modifier.fillMaxSize()) {
+                Scaffold(
+                    containerColor = Color.Transparent,
+            snackbarHost = {
+                SnackbarHost(hostState = snackbarHostState) { data ->
+                    Row(
+                        modifier = Modifier
+                            .padding(horizontal = 16.dp, vertical = 8.dp)
+                            .fillMaxWidth()
+                            .clip(androidx.compose.foundation.shape.RoundedCornerShape(16.dp))
+                            .background(NocturnePalette.ObsidianSurface.copy(alpha = 0.9f))
+                            .border(
+                                width = 1.dp,
+                                color = NocturnePalette.EmeraldGlow.copy(alpha = 0.3f),
+                                shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp)
+                            )
+                            .padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            painter = painterResource(id = R.drawable.ic_music_note),
+                            contentDescription = null,
+                            tint = NocturnePalette.EmeraldGlow,
+                            modifier = Modifier.size(24.dp)
+                        )
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Text(
+                            text = data.visuals.message,
+                            color = NocturnePalette.TextPrimary,
+                            fontSize = 14.sp,
+                            fontWeight = androidx.compose.ui.text.font.FontWeight.Medium
+                        )
+                    }
+                }
+            },
+            bottomBar = {
+                if (showMiniPlayerAndBottomNav) {
+                    Column(
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        PersistentMiniPlayer(
+                            songColor = songColor,
+                            playbackState = playbackState,
+                            onExpandNowPlaying = { isNowPlayingExpanded = true },
+                            onTogglePlayPause = viewModel::togglePlayPause,
+                            onSkipNext = viewModel::skipToNext,
+                            onSkipPrevious = viewModel::skipToPrevious,
+                            onToggleFavorite = {
+                                playbackState.currentSong?.let { viewModel.toggleSongFavorite(it) }
+                            }
+                        )
+
+                        NocturneBottomNavigationBar(
+                            currentRoute = currentDestination.route,
+                            onNavigate = { dest ->
+                                isSettingsOpen = false
+                                isRecentsOpen = false
+                                externalLibraryDrillDown = null
+                                currentDestination = dest
+                            }
+                        )
+                    }
+                }
+            }
         ) { innerPadding ->
             Box(
                 modifier = Modifier
@@ -243,6 +474,16 @@ fun NocturneRootApp(
                 }
 
                 when {
+                    isAppIconPickerOpen -> {
+                        AppIconSelectionScreen(
+                            currentIconId = userSettings.selectedAppIconId,
+                            onSelectIcon = { option ->
+                                viewModel.setAppIcon(option)
+                            },
+                            onBack = { isAppIconPickerOpen = false }
+                        )
+                    }
+
                     isSettingsOpen -> {
                         SettingsScreen(
                             userSettings = userSettings,
@@ -252,6 +493,7 @@ fun NocturneRootApp(
                             totalSongsCount = songs.size,
                             onBack = { isSettingsOpen = false },
                             onOpenEqualizerSheet = { showEqualizerSheet = true },
+                            onOpenAppIconPicker = { isAppIconPickerOpen = true },
                             onSetGaplessPlayback = viewModel::setGaplessPlayback,
                             onSetCrossfadeSec = viewModel::setCrossfadeDurationSec,
                             onSetVolumeNormalization = viewModel::setVolumeNormalization,
@@ -286,6 +528,24 @@ fun NocturneRootApp(
                         )
                     }
 
+                    isProfileOpen -> {
+                        com.nocturne.music.ui.home.ProfileScreen(
+                            userSettings = userSettings,
+                            onSaveProfile = { name, pictureUri ->
+                                viewModel.updateProfile(name, pictureUri)
+                            },
+                            onBack = { isProfileOpen = false }
+                        )
+                    }
+
+                    isBackupOpen -> {
+                        com.nocturne.music.ui.home.BackupScreen(
+                            onExportBackup = { viewModel.exportBackup() },
+                            onImportBackup = { uri -> viewModel.importBackup(uri) },
+                            onBack = { isBackupOpen = false }
+                        )
+                    }
+
                     currentDestination == PrimaryDestination.HOME -> {
                         HomeScreen(
                             allSongs = songs,
@@ -299,16 +559,18 @@ fun NocturneRootApp(
                             currentSong = playbackState.currentSong,
                             isPlaying = playbackState.isPlaying,
                             isScanning = isScanning,
+                            userSettings = userSettings,
                             onPlaySongs = viewModel::playSongs,
                             onOpenArtist = { artistId ->
-                                externalLibraryDrillDown = LibraryDrillDown.ArtistDetail(artistId)
-                                currentDestination = PrimaryDestination.LIBRARY
+                                openExternalDrillDown(LibraryDrillDown.ArtistDetail(artistId))
                             },
                             onToggleSongFavorite = viewModel::toggleSongFavorite,
                             onOpenTrackContext = { contextMenuSong = it },
                             onRescanLibrary = viewModel::scanMediaLibrary,
                             onOpenRecents = { isRecentsOpen = true },
-                            onOpenSettings = { isSettingsOpen = true }
+                            onOpenSettings = { isSettingsOpen = true },
+                            onOpenProfile = { coroutineScope.launch { drawerState.open() } },
+                            onOpenBackup = { isBackupOpen = true }
                         )
                     }
 
@@ -323,17 +585,21 @@ fun NocturneRootApp(
                             favoriteSongs = favoriteSongs,
                             favoriteAlbums = favoriteAlbums,
                             favoriteArtists = favoriteArtists,
+                            pinnedAlbums = pinnedAlbums,
                             recentlyPlayed = recentlyPlayed,
                             recentlyAdded = recentlyAdded,
                             currentSong = playbackState.currentSong,
                             isPlaying = playbackState.isPlaying,
                             userSettings = userSettings,
                             externalDrillDown = externalLibraryDrillDown,
-                            onClearExternalDrillDown = { externalLibraryDrillDown = null },
+                            onClearExternalDrillDown = clearExternalDrillDown,
                             onPlaySongs = viewModel::playSongs,
                             onToggleSongFavorite = viewModel::toggleSongFavorite,
                             onToggleAlbumFavorite = viewModel::toggleAlbumFavorite,
+                            onToggleAlbumPinned = viewModel::toggleAlbumPinned,
                             onToggleArtistFavorite = viewModel::toggleArtistFavorite,
+                            onToggleGridList = { viewModel.setIsLibraryGridView(it) },
+                            onToggleLandingGridList = { viewModel.setIsLibraryLandingGridView(it) },
                             onOpenTrackContext = { contextMenuSong = it },
                             onCreatePlaylistClick = { showCreatePlaylistDialog = true },
                             onRenamePlaylistClick = { playlistToRename = it },
@@ -345,7 +611,8 @@ fun NocturneRootApp(
                             onExcludeFolder = viewModel::excludeFolder,
                             onIncludeFolder = viewModel::includeFolder,
                             onRescanLibrary = viewModel::scanMediaLibrary,
-                            onOpenSettings = { isSettingsOpen = true }
+                            onOpenSettings = { isSettingsOpen = true },
+                            onDrillDownActiveChanged = { isLibraryDrillDownActive = it }
                         )
                     }
 
@@ -362,69 +629,18 @@ fun NocturneRootApp(
                             onClearHistory = viewModel::clearSearchHistory,
                             onPlaySongs = viewModel::playSongs,
                             onOpenAlbum = { albumId ->
-                                externalLibraryDrillDown = LibraryDrillDown.AlbumDetail(albumId)
-                                currentDestination = PrimaryDestination.LIBRARY
+                                openExternalDrillDown(LibraryDrillDown.AlbumDetail(albumId))
                             },
                             onOpenArtist = { artistId ->
-                                externalLibraryDrillDown = LibraryDrillDown.ArtistDetail(artistId)
-                                currentDestination = PrimaryDestination.LIBRARY
+                                openExternalDrillDown(LibraryDrillDown.ArtistDetail(artistId))
                             },
                             onOpenPlaylist = { playlistId ->
-                                externalLibraryDrillDown = LibraryDrillDown.PlaylistDetail(playlistId)
-                                currentDestination = PrimaryDestination.LIBRARY
+                                openExternalDrillDown(LibraryDrillDown.PlaylistDetail(playlistId))
                             },
                             onToggleSongFavorite = viewModel::toggleSongFavorite,
                             onOpenTrackContext = { contextMenuSong = it }
                         )
                     }
-                }
-            }
-        }
-
-        if (!isNowPlayingExpanded) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .align(Alignment.BottomCenter)
-            ) {
-                PersistentMiniPlayer(
-                    songColor = songColor,
-                    playbackState = playbackState,
-                    onExpandNowPlaying = { isNowPlayingExpanded = true },
-                    onTogglePlayPause = viewModel::togglePlayPause,
-                    onSkipNext = viewModel::skipToNext,
-                    onSkipPrevious = viewModel::skipToPrevious,
-                    onToggleFavorite = {
-                        playbackState.currentSong?.let { viewModel.toggleSongFavorite(it) }
-                    }
-                )
-
-                Box(
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(100.dp)
-                            .align(Alignment.BottomCenter)
-                            .background(
-                                brush = Brush.verticalGradient(
-                                    0.0f to Color.Transparent,
-                                    0.35f to Color.Black.copy(alpha = 0.25f),
-                                    0.70f to Color.Black.copy(alpha = 0.50f),
-                                    1.0f to Color.Black.copy(alpha = 0.65f)
-                                )
-                            )
-                    )
-                    NocturneBottomNavigationBar(
-                        currentRoute = currentDestination.route,
-                        onNavigate = { dest ->
-                            isSettingsOpen = false
-                            isRecentsOpen = false
-                            externalLibraryDrillDown = null
-                            currentDestination = dest
-                        }
-                    )
                 }
             }
         }
@@ -487,19 +703,19 @@ fun NocturneRootApp(
                         onAdjustLyricsOffsetMs = viewModel::adjustLyricsOffset,
                         onNavigateToAlbum = { albumId ->
                             isNowPlayingExpanded = false
-                            externalLibraryDrillDown = LibraryDrillDown.AlbumDetail(albumId)
-                            currentDestination = PrimaryDestination.LIBRARY
+                            openExternalDrillDown(LibraryDrillDown.AlbumDetail(albumId))
                         },
                         onNavigateToArtist = { artistId ->
                             isNowPlayingExpanded = false
-                            externalLibraryDrillDown = LibraryDrillDown.ArtistDetail(artistId)
-                            currentDestination = PrimaryDestination.LIBRARY
+                            openExternalDrillDown(LibraryDrillDown.ArtistDetail(artistId))
                         },
                         onToggleLyricsMode = { focusLyricsMode = true }
                     )
                 }
             }
-        }
+        } // End of ModalNavigationDrawer
+
+        // Custom Splash Screen overlay removed in favor of system splash screen
 
         // Context Menu & Interactive Dialogs
         contextMenuSong?.let { targetSong ->
@@ -513,13 +729,11 @@ fun NocturneRootApp(
                 onAddToPlaylist = { addToPlaylistSong = targetSong },
                 onGoToAlbum = {
                     isNowPlayingExpanded = false
-                    externalLibraryDrillDown = LibraryDrillDown.AlbumDetail(targetSong.albumId)
-                    currentDestination = PrimaryDestination.LIBRARY
+                    openExternalDrillDown(LibraryDrillDown.AlbumDetail(targetSong.albumId))
                 },
                 onGoToArtist = {
                     isNowPlayingExpanded = false
-                    externalLibraryDrillDown = LibraryDrillDown.ArtistDetail(targetSong.artistId)
-                    currentDestination = PrimaryDestination.LIBRARY
+                    openExternalDrillDown(LibraryDrillDown.ArtistDetail(targetSong.artistId))
                 },
                 onEditMetadata = { metadataEditSong = targetSong },
                 onEditArtwork = { editArtworkSong = targetSong }
@@ -617,6 +831,8 @@ fun NocturneRootApp(
                     viewModel.removeCustomArtwork(targetSong, applyAlbum)
                 }
             )
+        }
+            }
         }
     }
 }

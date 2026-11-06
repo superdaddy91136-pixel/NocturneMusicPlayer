@@ -5,6 +5,7 @@ import com.nocturne.music.database.FavoriteAlbumEntity
 import com.nocturne.music.database.FavoriteArtistEntity
 import com.nocturne.music.database.MusicDao
 import com.nocturne.music.database.PlayHistoryEntity
+import com.nocturne.music.database.PinnedAlbumEntity
 import com.nocturne.music.database.PlaylistEntity
 import com.nocturne.music.database.PlaylistSongCrossRef
 import com.nocturne.music.database.SearchHistoryEntity
@@ -93,9 +94,11 @@ class LibraryRepository @Inject constructor(
     val albumsFlow: Flow<List<Album>> = combine(
         rawSongsFlow,
         musicDao.observeFavoriteAlbumIds(),
+        musicDao.observePinnedAlbums(),
         preferencesRepository.userSettingsFlow
-    ) { songs, favAlbumIds, settings ->
+    ) { songs, favAlbumIds, pinnedAlbums, settings ->
         val favSet = favAlbumIds.toHashSet()
+        val pinnedMap = pinnedAlbums.associateBy({ it.albumId }, { it.pinnedAtMs })
         val grouped = songs.groupBy { it.albumId }
             .map { (albumId, albumSongs) ->
                 val sortedTracks = albumSongs.sortedWith(
@@ -112,6 +115,8 @@ class LibraryRepository @Inject constructor(
                     totalDurationMs = sortedTracks.sumOf { it.durationMs },
                     albumArtUri = sortedTracks.firstNotNullOfOrNull { it.albumArtUri },
                     isFavorite = albumId in favSet,
+                    isPinned = pinnedMap.containsKey(albumId),
+                    pinnedAtMs = pinnedMap[albumId],
                     songs = sortedTracks
                 )
             }
@@ -341,6 +346,14 @@ class LibraryRepository @Inject constructor(
         }
     }
 
+    suspend fun toggleAlbumPinned(albumId: Long, currentlyPinned: Boolean) = withContext(Dispatchers.IO) {
+        if (currentlyPinned) {
+            musicDao.removePinnedAlbum(albumId)
+        } else {
+            musicDao.addPinnedAlbum(PinnedAlbumEntity(albumId = albumId))
+        }
+    }
+
     suspend fun toggleArtistFavorite(artistId: Long, currentlyFavorite: Boolean) = withContext(Dispatchers.IO) {
         if (currentlyFavorite) {
             musicDao.removeFavoriteArtist(artistId)
@@ -351,7 +364,12 @@ class LibraryRepository @Inject constructor(
 
     suspend fun recordSongPlayed(songId: Long, listenedDurationMs: Long = 0L) = withContext(Dispatchers.IO) {
         val now = System.currentTimeMillis()
-        musicDao.incrementPlayCount(songId, now)
+        val currentTop8RecentIds = musicDao.getRecentlyPlayedSongIdsOnce(limit = 8)
+        if (songId in currentTop8RecentIds) {
+            musicDao.incrementPlayCountOnly(songId)
+        } else {
+            musicDao.incrementPlayCount(songId, now)
+        }
         musicDao.insertPlayHistory(
             PlayHistoryEntity(
                 songId = songId,

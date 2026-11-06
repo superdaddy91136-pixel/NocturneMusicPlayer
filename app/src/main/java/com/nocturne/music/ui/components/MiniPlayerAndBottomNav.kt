@@ -57,6 +57,7 @@ import androidx.compose.ui.text.font.FontWeight
 import com.nocturne.music.R
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.nocturne.music.designsystem.LocalArtworkAtmosphere
 import com.nocturne.music.designsystem.NocturnePalette
 import com.nocturne.music.model.PlaybackUiState
@@ -67,7 +68,7 @@ enum class PrimaryDestination(
     val icon: ImageVector
 ) {
     HOME("home", "Home", Icons.Filled.Home),
-    LIBRARY("library", "Library", Icons.Filled.LibraryMusic),
+    LIBRARY("library", "Your Library", Icons.Filled.LibraryMusic),
     SEARCH("search", "Search", Icons.Filled.Search)
 }
 
@@ -158,7 +159,7 @@ fun PersistentMiniPlayer(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 12.dp, vertical = 9.dp),
+                        .padding(start = 12.dp, end = 12.dp, top = 9.dp, bottom = 9.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     ArtworkImage(
@@ -175,7 +176,7 @@ fun PersistentMiniPlayer(
                         Text(
                             text = song.title,
                             style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
-                            color = NocturnePalette.TextPrimary,
+                            color = Color.White,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
@@ -183,48 +184,38 @@ fun PersistentMiniPlayer(
                         Text(
                             text = "${song.artist} • ${song.album}",
                             style = MaterialTheme.typography.bodySmall,
-                            color = NocturnePalette.TextSecondary,
+                            color = Color.White.copy(alpha = 0.7f),
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
                     }
-                    IconButton(
+                    FavoriteButton(
+                        isFavorite = song.isFavorite,
                         onClick = onToggleFavorite,
-                        modifier = Modifier.size(38.dp)
-                    ) {
-                        Icon(
-                            imageVector = if (song.isFavorite) Icons.Rounded.Favorite else Icons.Rounded.FavoriteBorder,
-                            contentDescription = "Favorite",
-                            tint = if (song.isFavorite) NocturnePalette.CrimsonRose else NocturnePalette.TextSecondary,
-                            modifier = Modifier.size(20.dp)
-                        )
-                    }
+                        iconSize = 20.dp,
+                        buttonSize = 38.dp,
+                        unfavoriteColor = Color.White
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
                     Box(
                         modifier = Modifier
-                            .size(40.dp)
-                            .clip(CircleShape)
-                            .background(atmosphere.primaryAccent)
+                            .size(48.dp)
+                            .clip(RoundedCornerShape(12.dp))
                             .clickable(onClick = onTogglePlayPause),
                         contentAlignment = Alignment.Center
                     ) {
-                        Icon(
-                            imageVector = if (playbackState.isPlaying) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
-                            contentDescription = "Play or Pause",
-                            tint = NocturnePalette.AmoledBlack,
-                            modifier = Modifier.size(22.dp)
-                        )
-                    }
-                    Spacer(modifier = Modifier.width(4.dp))
-                    IconButton(
-                        onClick = onSkipNext,
-                        modifier = Modifier.size(38.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Rounded.SkipNext,
-                            contentDescription = "Next Track",
-                            tint = NocturnePalette.TextPrimary,
-                            modifier = Modifier.size(23.dp)
-                        )
+                        androidx.compose.animation.Crossfade(
+                            targetState = playbackState.isPlaying,
+                            animationSpec = androidx.compose.animation.core.tween(120),
+                            label = "playPauseCrossfade"
+                        ) { isPlaying ->
+                            Icon(
+                                imageVector = if (isPlaying) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
+                                contentDescription = "Play or Pause",
+                                tint = Color.White,
+                                modifier = Modifier.size(32.dp)
+                            )
+                        }
                     }
                 }
 
@@ -252,10 +243,17 @@ fun NocturneBottomNavigationBar(
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .background(Color.Transparent)
+            .background(
+                brush = Brush.verticalGradient(
+                    0.0f to Color.Transparent,
+                    0.15f to Color.Black.copy(alpha = 0.50f),
+                    0.40f to Color.Black.copy(alpha = 0.85f),
+                    1.0f to Color.Black.copy(alpha = 0.95f)
+                )
+            )
             .navigationBarsPadding()
             .padding(horizontal = 20.dp)
-            .padding(top = MiniPlayerNavGap, bottom = 10.dp)
+            .padding(top = MiniPlayerNavGap, bottom = 8.dp)
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -265,15 +263,16 @@ fun NocturneBottomNavigationBar(
             PrimaryDestination.entries.forEach { dest ->
                 val selected = currentRoute.startsWith(dest.route)
 
-                Box(
+                Column(
                     modifier = Modifier
                         .clickable(
                             interactionSource = androidx.compose.runtime.remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
                             indication = null,
                             onClick = { onNavigate(dest) }
                         )
-                        .padding(14.dp),
-                    contentAlignment = Alignment.Center
+                        .padding(horizontal = 14.dp, vertical = 6.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(3.dp)
                 ) {
                     when (dest) {
                         PrimaryDestination.HOME -> {
@@ -282,7 +281,7 @@ fun NocturneBottomNavigationBar(
                                     painter = painterResource(id = if (isSelected) R.drawable.ic_home_filled_custom else R.drawable.ic_home_custom),
                                     contentDescription = dest.label,
                                     tint = if (isSelected) Color.White else Color.White.copy(alpha = 0.6f),
-                                    modifier = Modifier.size(30.dp)
+                                    modifier = Modifier.size(24.dp)
                                 )
                             }
                         }
@@ -292,7 +291,7 @@ fun NocturneBottomNavigationBar(
                                     painter = painterResource(id = if (isSelected) R.drawable.ic_library_filled_custom else R.drawable.ic_library_custom),
                                     contentDescription = dest.label,
                                     tint = if (isSelected) Color.White else Color.White.copy(alpha = 0.6f),
-                                    modifier = Modifier.size(30.dp)
+                                    modifier = Modifier.size(24.dp)
                                 )
                             }
                         }
@@ -306,10 +305,25 @@ fun NocturneBottomNavigationBar(
                                 imageVector = dest.icon,
                                 contentDescription = dest.label,
                                 tint = tintColor,
-                                modifier = Modifier.size(30.dp)
+                                modifier = Modifier.size(24.dp)
                             )
                         }
                     }
+
+                    val textColor by androidx.compose.animation.animateColorAsState(
+                        targetValue = if (selected) Color.White else Color.White.copy(alpha = 0.6f),
+                        animationSpec = androidx.compose.animation.core.tween(120),
+                        label = "labelTint"
+                    )
+
+                    Text(
+                        text = dest.label,
+                        style = MaterialTheme.typography.labelSmall.copy(
+                            fontWeight = FontWeight.Medium,
+                            fontSize = 11.sp
+                        ),
+                        color = textColor
+                    )
                 }
             }
         }

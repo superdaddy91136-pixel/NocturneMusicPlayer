@@ -29,7 +29,7 @@ class MediaStoreScanner @Inject constructor(
     @ApplicationContext private val context: Context
 ) {
     companion object {
-        private val ALBUM_ART_CONTENT_URI: Uri = Uri.parse("content://media/external/audio/albumart")
+        // ALBUM_ART_CONTENT_URI removed
     }
 
     suspend fun scanDeviceMusic(
@@ -192,9 +192,7 @@ class MediaStoreScanner @Inject constructor(
                         id
                     ).toString()
 
-                    val albumArtUri = if (albumId > 0) {
-                        ContentUris.withAppendedId(ALBUM_ART_CONTENT_URI, albumId).toString()
-                    } else null
+                    val albumArtUri = contentUri
 
                     val existing = existingSongsById[id]
                     results.add(

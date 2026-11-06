@@ -646,7 +646,14 @@ fun SleepTimerBottomSheet(
                 Switch(
                     checked = fadeOut,
                     onCheckedChange = { fadeOut = it },
-                    colors = SwitchDefaults.colors(checkedThumbColor = atmosphere.primaryAccent)
+                    colors = SwitchDefaults.colors(
+                        checkedThumbColor = androidx.compose.ui.graphics.Color(0xFF0B1A12),
+                        checkedTrackColor = NocturnePalette.EmeraldGlow,
+                        checkedBorderColor = NocturnePalette.EmeraldGlow,
+                        uncheckedThumbColor = androidx.compose.ui.graphics.Color.White.copy(alpha = 0.60f),
+                        uncheckedTrackColor = androidx.compose.ui.graphics.Color.White.copy(alpha = 0.12f),
+                        uncheckedBorderColor = androidx.compose.ui.graphics.Color.White.copy(alpha = 0.24f)
+                    )
                 )
             }
 
@@ -659,7 +666,14 @@ fun SleepTimerBottomSheet(
                 Switch(
                     checked = stopAtTrackEnd,
                     onCheckedChange = { stopAtTrackEnd = it },
-                    colors = SwitchDefaults.colors(checkedThumbColor = atmosphere.primaryAccent)
+                    colors = SwitchDefaults.colors(
+                        checkedThumbColor = androidx.compose.ui.graphics.Color(0xFF0B1A12),
+                        checkedTrackColor = NocturnePalette.EmeraldGlow,
+                        checkedBorderColor = NocturnePalette.EmeraldGlow,
+                        uncheckedThumbColor = androidx.compose.ui.graphics.Color.White.copy(alpha = 0.60f),
+                        uncheckedTrackColor = androidx.compose.ui.graphics.Color.White.copy(alpha = 0.12f),
+                        uncheckedBorderColor = androidx.compose.ui.graphics.Color.White.copy(alpha = 0.24f)
+                    )
                 )
             }
         }
@@ -831,7 +845,14 @@ fun EqualizerBottomSheet(
                         enabled = it
                         pushUpdate()
                     },
-                    colors = SwitchDefaults.colors(checkedThumbColor = atmosphere.primaryAccent)
+                    colors = SwitchDefaults.colors(
+                        checkedThumbColor = androidx.compose.ui.graphics.Color(0xFF0B1A12),
+                        checkedTrackColor = NocturnePalette.EmeraldGlow,
+                        checkedBorderColor = NocturnePalette.EmeraldGlow,
+                        uncheckedThumbColor = androidx.compose.ui.graphics.Color.White.copy(alpha = 0.60f),
+                        uncheckedTrackColor = androidx.compose.ui.graphics.Color.White.copy(alpha = 0.12f),
+                        uncheckedBorderColor = androidx.compose.ui.graphics.Color.White.copy(alpha = 0.24f)
+                    )
                 )
             }
 

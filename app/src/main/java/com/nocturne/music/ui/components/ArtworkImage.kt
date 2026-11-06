@@ -23,6 +23,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.runtime.remember
 import coil.compose.SubcomposeAsyncImage
 import coil.request.ImageRequest
 import com.nocturne.music.designsystem.NocturnePalette
@@ -64,8 +65,8 @@ fun ArtworkImage(
             modifier = baseModifier
         )
     } else {
-        SubcomposeAsyncImage(
-            model = ImageRequest.Builder(context)
+        val request = remember(artworkUri, artworkKey, context) {
+            ImageRequest.Builder(context)
                 .data(artworkUri)
                 .apply {
                     if (artworkKey != null) {
@@ -74,7 +75,10 @@ fun ArtworkImage(
                     }
                 }
                 .crossfade(true)
-                .build(),
+                .build()
+        }
+        SubcomposeAsyncImage(
+            model = request,
             contentDescription = contentDescription,
             contentScale = ContentScale.Crop,
             modifier = baseModifier,

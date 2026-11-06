@@ -152,6 +152,8 @@ data class PlaybackUiState(
 data class UserSettings(
     val gaplessPlayback: Boolean = true,
     val crossfadeDurationSec: Int = 0,
+    val isLibraryGridView: Boolean = true,
+    val isLibraryLandingGridView: Boolean = true,
     val volumeNormalization: Boolean = false,
     val normalizationPreampDb: Float = 0f,
     val resumeOnBluetoothConnect: Boolean = false,
@@ -172,5 +174,9 @@ data class UserSettings(
     val songSortOption: SongSortOption = SongSortOption.TITLE,
     val songSortDirection: SortDirection = SortDirection.ASCENDING,
     val albumSortOption: AlbumSortOption = AlbumSortOption.TITLE,
-    val artistSortOption: ArtistSortOption = ArtistSortOption.NAME
+    val artistSortOption: ArtistSortOption = ArtistSortOption.NAME,
+    val profileName: String = "Nocturne User",
+    val profilePictureUri: String? = null,
+    val selectedAppIconId: String = AppIconOption.DEFAULT.id,
+    val hasCompletedInitialScan: Boolean = false
 )

@@ -45,11 +45,17 @@ interface MusicDao {
     @Query("DELETE FROM songs")
     suspend fun clearAllSongs()
 
+    @Query("SELECT id FROM songs WHERE lastPlayedAtMs > 0 ORDER BY lastPlayedAtMs DESC LIMIT :limit")
+    suspend fun getRecentlyPlayedSongIdsOnce(limit: Int = 8): List<Long>
+
     @Query("UPDATE songs SET isFavorite = :isFavorite WHERE id = :songId")
     suspend fun updateSongFavorite(songId: Long, isFavorite: Boolean)
 
     @Query("UPDATE songs SET playCount = playCount + 1, lastPlayedAtMs = :timestampMs WHERE id = :songId")
     suspend fun incrementPlayCount(songId: Long, timestampMs: Long)
+
+    @Query("UPDATE songs SET playCount = playCount + 1 WHERE id = :songId")
+    suspend fun incrementPlayCountOnly(songId: Long)
 
     @Query("UPDATE songs SET customTitleOverride = :title, customArtistOverride = :artist, customAlbumOverride = :album, customGenreOverride = :genre, customYearOverride = :year WHERE id = :songId")
     suspend fun updateSongMetadataOverrides(
@@ -80,6 +86,16 @@ interface MusicDao {
     @Query("DELETE FROM favorite_albums WHERE albumId = :albumId")
     suspend fun removeFavoriteAlbum(albumId: Long)
 
+    // Pinned Albums
+    @Query("SELECT * FROM pinned_albums ORDER BY pinnedAtMs DESC")
+    fun observePinnedAlbums(): Flow<List<PinnedAlbumEntity>>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun addPinnedAlbum(entity: PinnedAlbumEntity)
+
+    @Query("DELETE FROM pinned_albums WHERE albumId = :albumId")
+    suspend fun removePinnedAlbum(albumId: Long)
+
     @Query("SELECT artistId FROM favorite_artists")
     fun observeFavoriteArtistIds(): Flow<List<Long>>
 
@@ -92,6 +108,9 @@ interface MusicDao {
     // Playlists
     @Query("SELECT * FROM playlists ORDER BY updatedAtMs DESC")
     fun observePlaylists(): Flow<List<PlaylistEntity>>
+    
+    @Query("SELECT * FROM playlists ORDER BY updatedAtMs DESC")
+    suspend fun getPlaylistsOnce(): List<PlaylistEntity>
 
     @Query("SELECT * FROM playlist_songs ORDER BY playlistId ASC, position ASC")
     fun observeAllPlaylistCrossRefs(): Flow<List<PlaylistSongCrossRef>>
